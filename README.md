@@ -5,7 +5,7 @@ Retrieval-Augmented Generation over `docs/User_Guide.pdf` using:
 - SentenceTransformers `google/embeddinggemma-300m` for embeddings
 - LanceDB for vector storage and hybrid search (vector + BM25)
 - FlagEmbedding reranker `BAAI/bge-reranker-v2-m3`
-- OpenRouter `openai/gpt-oss-120b` for final answer generation
+- OpenRouter `qwen/qwen3-30b-a3b-instruct-2507` for final answer generation
 
 ## Quickstart (Windows)
 
@@ -35,12 +35,22 @@ copy env.example .env
 python scripts/ingest_user_guide.py
 ```
 
-5) Run the API
+5) Run the API (serves Web UI)
 ```bat
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-6) Ask a question
+6) Open Web UI
+```
+http://localhost:8000/
+```
+The chat UI supports:
+- Markdown rendering with code highlighting
+- Clickable citations opening the PDF page
+- Russian UI labels and editing of your messages
+- Top‑K slider with persistent value (localStorage)
+
+7) Ask a question (REST example)
 ```bat
 curl -X POST http://localhost:8000/ask ^
   -H "Content-Type: application/json" ^
@@ -49,10 +59,11 @@ curl -X POST http://localhost:8000/ask ^
 
 ## Project layout
 ```
-app/            FastAPI app (exposes POST /ask)
+app/            FastAPI app (serves Web UI at / and static at /assets, /docs)
+  └─ static/    Chat UI (index.html, app.js, styles.css)
 rag/            Core RAG pipeline modules
 scripts/        CLI helpers (ingestion script)
-docs/           Input PDF(s)
+docs/           Input PDF(s) (served at /docs for citations)
 ```
 
 ## Configuration (.env)
@@ -65,7 +76,7 @@ Optional (defaults shown):
 - `LANCEDB_TABLE=user_guide`
 - `EMBEDDING_MODEL_ID=google/embeddinggemma-300m`
 - `RERANKER_MODEL_ID=BAAI/bge-reranker-v2-m3`
-- `LLM_MODEL_ID=openai/gpt-oss-120b`
+- `LLM_MODEL_ID=qwen/qwen3-30b-a3b-instruct-2507`
 - `OPENROUTER_ENDPOINT=https://openrouter.ai/api/v1/chat/completions`
 - `DEVICE=cuda` (auto-falls back to `cpu` if CUDA not available)
 - `BATCH_SIZE_EMBED=64`
@@ -83,7 +94,7 @@ Use `env.example` as a reference.
 - Retrieval: hybrid search = 0.8 (vector cosine) + 0.2 (BM25) with top_k candidates.
 - Reranking: BGE reranker v2-m3 selects top 15.
 - Context assembly: concatenates with headers `S#{serial} — {filename}, p.{page}:` under ~3500 token budget.
-- Generation: OpenRouter `openai/gpt-oss-120b` answers using only provided CONTEXT.
+- Generation: OpenRouter `qwen/qwen3-30b-a3b-instruct-2507` answers using only provided CONTEXT.
 
 If the answer is not found in the context, the system responds with:
 ```

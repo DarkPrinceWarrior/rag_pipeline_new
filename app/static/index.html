@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RAG Чат</title>
+    <link rel="stylesheet" href="/assets/styles.css?v=2" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Ccircle cx='128' cy='128' r='112' fill='%232cd'/%3E%3Ctext x='50%' y='54%' dominant-baseline='middle' text-anchor='middle' font-size='120' fill='white' font-family='Arial, Helvetica, sans-serif'%3ER%3C/text%3E%3C/svg%3E" />
+    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/common.min.js" defer></script>
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand">
+        <div class="logo">R</div>
+        <div class="meta">
+          <h1>RAG Ассистент</h1>
+          <p>Ответы по руководству пользователя (LanceDB)</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="clear-btn" class="ghost" title="Новый чат">Новый чат</button>
+      </div>
+    </header>
+
+    <main class="chat">
+      <div id="messages" class="messages" aria-live="polite"></div>
+      <form id="composer" class="composer" autocomplete="off">
+        <div class="input-wrap">
+          <textarea id="input" rows="1" placeholder="Напишите сообщение... (Shift+Enter — новая строка)" spellcheck="true"></textarea>
+        </div>
+        <div class="controls">
+          <label class="topk">
+            <span>Документов в контексте</span>
+            <div class="topk-row">
+              <input id="topk" type="range" min="1" max="100" value="20" step="1" aria-label="Количество документов в контексте" />
+              <output id="topk-value" for="topk">20</output>
+            </div>
+          </label>
+          <button id="send" class="primary" type="submit" title="Отправить (Enter)">Отправить</button>
+        </div>
+      </form>
+    </main>
+
+    <template id="msg-template">
+      <div class="msg">
+        <div class="avatar"></div>
+        <div class="bubble">
+          <div class="content"></div>
+          <div class="meta-row">
+            <div class="meta"></div>
+            <div class="actions">
+              <button class="copy ghost" title="Копировать">Копировать</button>
+            </div>
+          </div>
+          <div class="sources"></div>
+        </div>
+      </div>
+    </template>
+
+    <script src="/assets/app.js?v=2" defer></script>
+  </body>
+  </html>
