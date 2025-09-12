@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
+import 'katex/dist/katex.min.css'
 import type { AskRequest, AskResponse, Citation } from './types'
 
 function useApiBase2() {
@@ -26,6 +30,15 @@ function CitationList2({ citations }: { citations: Citation[] }) {
 }
 
 type ChatMessage2 = { role: 'user' | 'assistant' | 'system'; content: string; citations?: Citation[] }
+
+function transformMath(content: string): string {
+  // Convert custom :[ ... ] to $$...$$ and :( ... ) to $...$
+  // Block-style first (greedy across newlines within brackets)
+  let out = content.replace(/:\s*\[(\s*[\s\S]*?\s*)\]/g, (_m, g1) => `$$\n${g1}\n$$`)
+  // Inline-style
+  out = out.replace(/:\s*\((\s*[\s\S]*?\s*)\)/g, (_m, g1) => `$${g1}$`)
+  return out
+}
 
 function App2() {
   const apiBase = useApiBase2()
@@ -235,7 +248,13 @@ function App2() {
                     </div>
                   ) : m.role === 'assistant' ? (
                     <>
-                      <ReactMarkdown>{m.content}</ReactMarkdown>
+                      <ReactMarkdown
+                        className="prose"
+                        remarkPlugins={[remarkGfm, remarkMath]}
+                        rehypePlugins={[rehypeKatex]}
+                      >
+                        {transformMath(m.content)}
+                      </ReactMarkdown>
                       <CitationList citations={m.citations || []} />
                     </>
                   ) : (
@@ -572,7 +591,13 @@ export default function App() {
                       </div>
                     ) : m.role === 'assistant' ? (
                       <>
-                        <ReactMarkdown>{m.content}</ReactMarkdown>
+                        <ReactMarkdown
+                          className="prose"
+                          remarkPlugins={[remarkGfm, remarkMath]}
+                          rehypePlugins={[rehypeKatex]}
+                        >
+                          {transformMath(m.content)}
+                        </ReactMarkdown>
                         <CitationList2 citations={m.citations || []} />
                       </>
                     ) : (

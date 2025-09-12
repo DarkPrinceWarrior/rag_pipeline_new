@@ -32,5 +32,13 @@ class Settings:
 	chunk_size_tokens: int = int(os.getenv("CHUNK_SIZE_TOKENS", "1000"))
 	chunk_overlap_tokens: int = int(os.getenv("CHUNK_OVERLAP_TOKENS", "200"))
 
+	# Web fallback configuration
+	enable_web_fallback: bool = os.getenv("ENABLE_WEB_FALLBACK", "true").lower() in ("1", "true", "yes")
+	manual_min_rerank_score: float = float(os.getenv("MANUAL_MIN_RERANK_SCORE", "0.35"))
+	manual_min_context_tokens: int = int(os.getenv("MANUAL_MIN_CONTEXT_TOKENS", "120"))
+	web_search_max_results: int = int(os.getenv("WEB_SEARCH_MAX_RESULTS", "5"))
+	web_fetch_top_n: int = int(os.getenv("WEB_FETCH_TOP_N", "3"))
+	web_context_max_tokens: int = int(os.getenv("WEB_CONTEXT_MAX_TOKENS", "3200"))
+
 
 settings = Settings()

@@ -13,6 +13,7 @@ from .embedding import EmbeddingModel
 from .reranker import Reranker
 from .store import LanceDBStore, LanceRecord
 from .utils import get_tokenizer, sliding_token_windows
+from .web_search import build_web_context
 
 
 @dataclass
@@ -55,7 +56,7 @@ class RAGPipeline:
 		query: str,
 		candidates: List[Tuple[Dict, float]],
 		max_context_tokens: int = 3500,
-	) -> Tuple[str, List[Citation]]:
+	) -> Tuple[str, List[Citation], float, int]:
 		# Prepare reranker inputs
 		passages_with_meta: List[Tuple[str, dict]] = []
 		for hit, _ in candidates:
@@ -66,6 +67,7 @@ class RAGPipeline:
 			}
 			passages_with_meta.append((hit["text"], meta))
 		reranked = self.reranker.rerank(query, passages_with_meta, top_n=15)
+		best_score = float(reranked[0][2]) if reranked else 0.0
 		# Assemble with headers and token budget
 		header_template = "S#{serial} — {filename}, p.{page}: "
 		enc = get_tokenizer()
@@ -107,14 +109,42 @@ class RAGPipeline:
 			else:
 				break
 		context = "\n\n".join(context_parts)
-		return context, citations
+		enc2 = get_tokenizer()
+		context_tokens = len(enc2.encode(context)) if context else 0
+		return context, citations, best_score, context_tokens
 
 	def answer(self, query: str, top_k: int = 100) -> Dict:
 		start = time.time()
 		qv = self.embedder.embed_query(query)
 		candidates = self.store.hybrid_search(query, qv, top_k=top_k, weights=(0.8, 0.2))
-		context, citations = self._assemble_context(query, candidates, max_context_tokens=3500)
-		answer = self._generate_with_openrouter(query, context)
+		context, citations, best_score, context_tokens = self._assemble_context(query, candidates, max_context_tokens=3500)
+		answer = None
+		# Decide if we should fallback to web search
+		use_web = False
+		if settings.enable_web_fallback:
+			insufficient_manual = (not candidates) or (best_score < settings.manual_min_rerank_score) or (context_tokens < settings.manual_min_context_tokens)
+			use_web = bool(insufficient_manual)
+		if use_web:
+			web_ctx, web_results = build_web_context(
+				query,
+				max_results=settings.web_search_max_results,
+				fetch_top_n=settings.web_fetch_top_n,
+				max_tokens=settings.web_context_max_tokens,
+			)
+			if web_ctx:
+				generated = self._generate_with_openrouter_web(query, web_ctx)
+				notice = "В мануале нет данных — ищем в интернете.\n\n"
+				sources_lines = []
+				for r in web_results[: settings.web_fetch_top_n]:
+					title = r.title or r.url
+					sources_lines.append(f"- [{title}]({r.url})")
+				sources_md = ("\n\nИсточники:\n" + "\n".join(sources_lines)) if sources_lines else ""
+				answer = notice + generated + sources_md
+				citations = []
+			else:
+				answer = self._generate_with_openrouter(query, context)
+		else:
+			answer = self._generate_with_openrouter(query, context)
 		latency_ms = int((time.time() - start) * 1000)
 		return {
 			"answer": answer,
@@ -127,14 +157,46 @@ class RAGPipeline:
 			"You are a precise Retrieval-Augmented Generation assistant.\n"
 			"Answer strictly using the provided CONTEXT from User Guide.pdf.\n"
 			"If the answer is not in the context, say: \"I don't have enough information in the manual to answer.\"\n"
-			"Always:\n- show a concise answer first,\n- then bullet key steps,\n- then cite pages as (S# — filename, p.X).\n"
-			"Avoid hallucinations; do not invent page numbers.\n\n"
+			"Always:\n- show a concise answer first,\n- then bullet key steps,\n- then cite pages as (S# - filename, p.X).\n"
+			"Avoid hallucinations; do not invent page numbers.\n"
+			"For formulas, use LaTeX: inline $...$, block $$...$$. Do not use custom wrappers.\n\n"
 			f"QUESTION:\n{user_query}\n\nCONTEXT:\n{context}"
 		)
 		headers = {
 			"Authorization": f"Bearer {settings.openrouter_api_key}",
 			"Content-Type": "application/json",
 			"X-Title": "UserGuide-RAG-with-LanceDB",
+		}
+		body = {
+			"model": settings.llm_model_id,
+			"temperature": 0.2,
+			"top_p": 0.95,
+			"max_tokens": 1024,
+			"messages": [
+				{"role": "system", "content": "You are a helpful, precise assistant."},
+				{"role": "user", "content": prompt},
+			],
+		}
+		with httpx.Client(timeout=httpx.Timeout(60.0)) as client:
+			resp = client.post(settings.__dict__.get("openrouter_endpoint", "https://openrouter.ai/api/v1/chat/completions"), headers=headers, content=json.dumps(body))
+			resp.raise_for_status()
+			data = resp.json()
+			return data["choices"][0]["message"]["content"].strip()
+
+	def _generate_with_openrouter_web(self, user_query: str, web_context: str) -> str:
+		prompt = (
+			"You are a precise assistant with web augmentation.\n"
+			"The PDF manual did not contain the needed answer.\n"
+			"Use ONLY the provided WEB CONTEXT below to answer.\n"
+			"Always:\n- start with a concise answer,\n- then bullet key steps or facts,\n- avoid speculation; if unclear, say what is uncertain.\n"
+			"Do not fabricate sources.\n"
+			"For formulas, use LaTeX: inline $...$, block $$...$$. Do not use custom wrappers.\n\n"
+			f"QUESTION:\n{user_query}\n\nWEB CONTEXT:\n{web_context}"
+		)
+		headers = {
+			"Authorization": f"Bearer {settings.openrouter_api_key}",
+			"Content-Type": "application/json",
+			"X-Title": "UserGuide-RAG-with-LanceDB-WebFallback",
 		}
 		body = {
 			"model": settings.llm_model_id,

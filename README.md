@@ -101,6 +101,21 @@ If the answer is not found in the context, the system responds with:
 I don't have enough information in the manual to answer.
 ```
 
+### Web fallback (optional)
+If the manual lacks sufficient information, an automatic web search fallback can run. When triggered, the assistant clearly states in the UI:
+
+```
+В мануале нет данных — ищем в интернете.
+```
+
+Configuration (env):
+- `ENABLE_WEB_FALLBACK=true`
+- `MANUAL_MIN_RERANK_SCORE=0.35` (fallback if reranker confidence is below)
+- `MANUAL_MIN_CONTEXT_TOKENS=120` (fallback if too little manual context)
+- `WEB_SEARCH_MAX_RESULTS=5` (search results to consider)
+- `WEB_FETCH_TOP_N=3` (pages to fetch for richer context)
+- `WEB_CONTEXT_MAX_TOKENS=3200` (budget for web context)
+
 ## API
 - Endpoint: `POST /ask`
 - Request JSON:
