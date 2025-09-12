@@ -154,12 +154,13 @@ class RAGPipeline:
 
 	def _generate_with_openrouter(self, user_query: str, context: str) -> str:
 		prompt = (
-			"You are a precise Retrieval-Augmented Generation assistant.\n"
-			"Answer strictly using the provided CONTEXT from User Guide.pdf.\n"
-			"If the answer is not in the context, say: \"I don't have enough information in the manual to answer.\"\n"
-			"Always:\n- show a concise answer first,\n- then bullet key steps,\n- then cite pages as (S# - filename, p.X).\n"
-			"Avoid hallucinations; do not invent page numbers.\n"
-			"For formulas, use LaTeX: inline $...$, block $$...$$. Do not use custom wrappers.\n\n"
+			"Ты — точный ассистент Retrieval‑Augmented Generation.\n"
+			"Отвечай строго, используя только раздел CONTEXT из User_Guide.pdf.\n"
+			"Если ответа нет в контексте, скажи: \"У меня недостаточно информации в руководстве, чтобы ответить.\"\n"
+			"Всегда:\n- сначала дай краткий ответ,\n- затем перечисли ключевые шаги пунктами,\n- затем укажи страницы как (S# - filename, p.X).\n"
+			"Не придумывай факты и номера страниц.\n"
+			"Формулы оформляй в LaTeX: inline $...$, block $$...$$. Не используй кастомные обёртки.\n"
+			"Отвечай только на русском языке.\n\n"
 			f"QUESTION:\n{user_query}\n\nCONTEXT:\n{context}"
 		)
 		headers = {
@@ -185,12 +186,13 @@ class RAGPipeline:
 
 	def _generate_with_openrouter_web(self, user_query: str, web_context: str) -> str:
 		prompt = (
-			"You are a precise assistant with web augmentation.\n"
-			"The PDF manual did not contain the needed answer.\n"
-			"Use ONLY the provided WEB CONTEXT below to answer.\n"
-			"Always:\n- start with a concise answer,\n- then bullet key steps or facts,\n- avoid speculation; if unclear, say what is uncertain.\n"
-			"Do not fabricate sources.\n"
-			"For formulas, use LaTeX: inline $...$, block $$...$$. Do not use custom wrappers.\n\n"
+			"Ты — точный ассистент с веб‑дополнением.\n"
+			"PDF‑мануал не содержит нужного ответа.\n"
+			"Используй ТОЛЬКО раздел WEB CONTEXT ниже для ответа.\n"
+			"Всегда:\n- начни с краткого ответа,\n- затем перечисли ключевые шаги/факты пунктами,\n- избегай спекуляций; если что-то неясно — так и скажи.\n"
+			"Не выдумывай источники.\n"
+			"Формулы оформляй в LaTeX: inline $...$, block $$...$$. Не используй кастомные обёртки.\n"
+			"Отвечай только на русском языке.\n\n"
 			f"QUESTION:\n{user_query}\n\nWEB CONTEXT:\n{web_context}"
 		)
 		headers = {
