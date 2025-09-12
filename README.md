@@ -28,11 +28,18 @@ copy env.example .env
 - Open `.env` and set:
   - `OPENROUTER_API_KEY=...` (required)
   - `HF_TOKEN=...` (required for gated models on Hugging Face)
-  - Optional: tune paths and parameters (see Configuration)
+  - Optional: tune paths and parameters (see Configuration). Key options:
+    - Ingestion flags: `PREFER_DOCLING_API`, `ENABLE_CLI_FALLBACK`, `ENABLE_OCR`, `PRESERVE_CASE`, `STRIP_HEADERS_FOOTERS`, `MERGE_HYPHENATION`, `TABLE_MODE`, `MAX_PARALLEL_PAGES`, `ALLOWED_EXTS`
+    - Rerank meta weights: `RERANK_BONUS_HEADING`, `RERANK_BONUS_TABLE`, `RERANK_BONUS_CODE`, `RERANK_BONUS_LIST`, `RERANK_BONUS_MATH`, `RERANK_SECTION_DEPTH_PENALTY`, `RERANK_MAX_META_BONUS`
 
 4) Ingest the manual into LanceDB
 ```bat
 python scripts/ingest_user_guide.py
+```
+
+4.1) Ingest any file or directory (multi‑format)
+```bat
+python scripts/ingest_path.py <path-to-file-or-dir>
 ```
 
 5) Run the API (serves Web UI)
@@ -62,7 +69,7 @@ curl -X POST http://localhost:8000/ask ^
 app/            FastAPI app (serves Web UI at / and static at /assets, /docs)
   └─ static/    Chat UI (index.html, app.js, styles.css)
 rag/            Core RAG pipeline modules
-scripts/        CLI helpers (ingestion script)
+scripts/        CLI helpers (ingestion scripts)
 docs/           Input PDF(s) (served at /docs for citations)
 ```
 
@@ -72,29 +79,48 @@ Required:
 - `HF_TOKEN` — Hugging Face token (for model downloads)
 
 Optional (defaults shown):
-- `LANCEDB_PATH=./lancedb_data`
-- `LANCEDB_TABLE=user_guide`
-- `EMBEDDING_MODEL_ID=google/embeddinggemma-300m`
-- `RERANKER_MODEL_ID=BAAI/bge-reranker-v2-m3`
-- `LLM_MODEL_ID=qwen/qwen3-30b-a3b-instruct-2507`
-- `OPENROUTER_ENDPOINT=https://openrouter.ai/api/v1/chat/completions`
-- `DEVICE=cuda` (auto-falls back to `cpu` if CUDA not available)
-- `BATCH_SIZE_EMBED=64`
-- `BATCH_SIZE_RERANK=16`
-- `CHUNK_SIZE_TOKENS=1000`
-- `CHUNK_OVERLAP_TOKENS=200`
+- Core paths and models
+  - `LANCEDB_PATH=./lancedb_data`
+  - `LANCEDB_TABLE=user_guide`
+  - `EMBEDDING_MODEL_ID=google/embeddinggemma-300m`
+  - `RERANKER_MODEL_ID=BAAI/bge-reranker-v2-m3`
+  - `LLM_MODEL_ID=qwen/qwen3-30b-a3b-instruct-2507`
+  - `OPENROUTER_ENDPOINT=https://openrouter.ai/api/v1/chat/completions`
+  - `DEVICE=cuda` (auto-falls back to `cpu` if CUDA not available)
+  - `BATCH_SIZE_EMBED=64`
+  - `BATCH_SIZE_RERANK=16`
+- Ingestion
+  - `CHUNK_SIZE_TOKENS=1000`
+  - `CHUNK_OVERLAP_TOKENS=200`
+  - `PREFER_DOCLING_API=true`
+  - `ENABLE_CLI_FALLBACK=true`
+  - `ENABLE_OCR=true` (requires Tesseract installed; otherwise skip)
+  - `PRESERVE_CASE=true`
+  - `STRIP_HEADERS_FOOTERS=true`
+  - `MERGE_HYPHENATION=true`
+  - `TABLE_MODE=md` (md|html|csv)
+  - `MAX_PARALLEL_PAGES=4`
+  - `ALLOWED_EXTS=.pdf,.docx,.pptx,.xlsx,.html,.htm,.txt`
+- Rerank meta weights
+  - `RERANK_BONUS_HEADING=0.10`
+  - `RERANK_BONUS_TABLE=0.06`
+  - `RERANK_BONUS_CODE=0.06`
+  - `RERANK_BONUS_LIST=0.02`
+  - `RERANK_BONUS_MATH=0.05`
+  - `RERANK_SECTION_DEPTH_PENALTY=0.015`
+  - `RERANK_MAX_META_BONUS=0.18`
 
 Use `env.example` as a reference.
 
 ## How it works
-- Parsing: PDF is parsed exclusively with Docling. If Python API is unavailable, a Docling CLI fallback exports Markdown.
-- Normalization: text is lowercased and normalized to NFKC.
-- Chunking: token-based windows of `CHUNK_SIZE_TOKENS` with `CHUNK_OVERLAP_TOKENS` overlap.
-- Storage: chunks are embedded (L2-normalized) and stored in LanceDB with metadata.
-- Retrieval: hybrid search = 0.8 (vector cosine) + 0.2 (BM25) with top_k candidates.
-- Reranking: BGE reranker v2-m3 selects top 15.
-- Context assembly: concatenates with headers `S#{serial} — {filename}, p.{page}:` under ~3500 token budget.
-- Generation: OpenRouter `qwen/qwen3-30b-a3b-instruct-2507` answers using only provided CONTEXT.
+- Parsing: documents are parsed with Docling API; CLI is used as fallback; optional OCR for scans.
+- Normalization: Unicode NFKC, с гибкими опциями (case, переносы, хедеры/футеры).
+- Chunking: семантические блоки (заголовки/абзацы/списки/таблицы/код/формулы) + токенный бюджет/перекрытие.
+- Storage: эмбеддинги и метаданные (section_path, element_type, lang, content_hash) сохраняются в LanceDB.
+- Retrieval: гибрид (вектор cosine + BM25 via bm25s); итоговое объединение и нормализация скорингов.
+- Reranking: BGE v2‑m3 с мета‑бонусами по типу элемента и штрафом за глубину секции.
+- Context assembly: заголовки вида `S#{serial} — {filename}, стр. {page}, {section_path} [element_type] (lang):` с токенным бюджетом ~3500.
+- Generation: OpenRouter `qwen/qwen3-30b-a3b-instruct-2507` отвечает строго по CONTEXT.
 
 If the answer is not found in the context, the system responds with:
 ```

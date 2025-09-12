@@ -31,6 +31,26 @@ class Settings:
 
 	chunk_size_tokens: int = int(os.getenv("CHUNK_SIZE_TOKENS", "1000"))
 	chunk_overlap_tokens: int = int(os.getenv("CHUNK_OVERLAP_TOKENS", "200"))
+	# Ingest controls
+	prefer_docling_api: bool = os.getenv("PREFER_DOCLING_API", "true").lower() in ("1", "true", "yes")
+	enable_cli_fallback: bool = os.getenv("ENABLE_CLI_FALLBACK", "true").lower() in ("1", "true", "yes")
+	enable_ocr: bool = os.getenv("ENABLE_OCR", "true").lower() in ("1", "true", "yes")
+	preserve_case: bool = os.getenv("PRESERVE_CASE", "true").lower() in ("1", "true", "yes")
+	strip_headers_footers: bool = os.getenv("STRIP_HEADERS_FOOTERS", "true").lower() in ("1", "true", "yes")
+	merge_hyphenation: bool = os.getenv("MERGE_HYPHENATION", "true").lower() in ("1", "true", "yes")
+	table_mode: str = os.getenv("TABLE_MODE", "md")  # md|html|csv (пока влияет только на метаданные)
+	max_parallel_pages: int = int(os.getenv("MAX_PARALLEL_PAGES", "4"))
+	allowed_exts: str = os.getenv("ALLOWED_EXTS", ".pdf,.docx,.pptx,.xlsx,.html,.htm,.txt")
+
+	# Rerank meta-weights
+	rerank_bonus_heading: float = float(os.getenv("RERANK_BONUS_HEADING", "0.08"))
+	rerank_bonus_table: float = float(os.getenv("RERANK_BONUS_TABLE", "0.05"))
+	rerank_bonus_code: float = float(os.getenv("RERANK_BONUS_CODE", "0.05"))
+	rerank_bonus_list: float = float(os.getenv("RERANK_BONUS_LIST", "0.02"))
+	rerank_bonus_math: float = float(os.getenv("RERANK_BONUS_MATH", "0.04"))
+	rerank_bonus_paragraph: float = float(os.getenv("RERANK_BONUS_PARAGRAPH", "0.0"))
+	rerank_section_depth_penalty: float = float(os.getenv("RERANK_SECTION_DEPTH_PENALTY", "0.01"))
+	rerank_max_meta_bonus: float = float(os.getenv("RERANK_MAX_META_BONUS", "0.15"))
 
 	# Web fallback configuration
 	enable_web_fallback: bool = os.getenv("ENABLE_WEB_FALLBACK", "true").lower() in ("1", "true", "yes")

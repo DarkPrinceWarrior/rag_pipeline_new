@@ -12,7 +12,7 @@ from rag.pipeline import RAGPipeline
 
 
 def main() -> int:
-	pdf_path = Path("docs") / "User_Guide.pdf"
+	pdf_path = Path(sys.argv[1]) if len(sys.argv) > 1 else (Path("docs") / "User_Guide.pdf")
 	if not pdf_path.exists():
 		print(f"PDF not found: {pdf_path}", file=sys.stderr)
 		return 1

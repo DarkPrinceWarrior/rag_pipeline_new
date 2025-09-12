@@ -33,6 +33,36 @@ class Reranker:
 	def rerank(self, query: str, passages_with_meta: List[Tuple[str, dict]], top_n: int) -> List[Tuple[str, dict, float]]:
 		texts = [t for t, _ in passages_with_meta]
 		scores = self.score_pairs(query, texts)
-		items = [(texts[i], passages_with_meta[i][1], scores[i]) for i in range(len(texts))]
+		items: List[Tuple[str, dict, float]] = []
+		for i in range(len(texts)):
+			base = scores[i]
+			meta = passages_with_meta[i][1] or {}
+			etype = (meta.get("element_type") or "paragraph").lower()
+			section_path = meta.get("section_path") or ""
+			# Бонусы/штрафы по типу элемента
+			bonus = 0.0
+			if "heading" in etype:
+				bonus += settings.rerank_bonus_heading
+			if "table" in etype:
+				bonus += settings.rerank_bonus_table
+			if "code" in etype:
+				bonus += settings.rerank_bonus_code
+			if "list" in etype:
+				bonus += settings.rerank_bonus_list
+			if "math" in etype:
+				bonus += settings.rerank_bonus_math
+			if "paragraph" in etype:
+				bonus += settings.rerank_bonus_paragraph
+			# Наказание за глубину секции (чем глубже, тем немного ниже)
+			depth = 0
+			if section_path:
+				depth = max(0, len([p for p in section_path.split(" > ") if p.strip()]) - 1)
+				bonus -= min(settings.rerank_section_depth_penalty * depth, settings.rerank_max_meta_bonus)
+			# Ограничием общий бонус/штраф
+			if bonus > settings.rerank_max_meta_bonus:
+				bonus = settings.rerank_max_meta_bonus
+			if bonus < -settings.rerank_max_meta_bonus:
+				bonus = -settings.rerank_max_meta_bonus
+			items.append((texts[i], meta, float(base + bonus)))
 		items.sort(key=lambda x: x[2], reverse=True)
 		return items[:top_n]

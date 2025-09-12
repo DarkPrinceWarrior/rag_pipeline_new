@@ -36,6 +36,17 @@ class RAGPipeline:
 		chunks = ingest_pdf_to_chunks(pdf_path)
 		vectors = self.embedder.embed([c["text"] for c in chunks])
 		records = []
+		# Пропуск неизменённых документов по хэшу содержимого (если таблица поддерживает поле)
+		content_hash = None
+		if chunks:
+			content_hash = chunks[0].get("content_hash")
+			filename = chunks[0].get("filename")
+			if content_hash and filename and hasattr(self.store, "has_file_with_hash"):
+				try:
+					if self.store.has_file_with_hash(str(filename), str(content_hash)):
+						return 0
+				except Exception:
+					pass
 		for i, c in enumerate(chunks):
 			records.append(
 				LanceRecord(
@@ -46,6 +57,12 @@ class RAGPipeline:
 					page=int(c["page"]),
 					chunk_id=c["chunk_id"],
 					source_path=c["source_path"],
+					section_path=c.get("section_path"),
+					element_type=c.get("element_type"),
+					content_hash=c.get("content_hash"),
+					ocr_used=c.get("ocr_used"),
+					doc_id=c.get("doc_id"),
+					lang=c.get("lang"),
 				)
 			)
 		self.store.upsert(records)
@@ -64,12 +81,15 @@ class RAGPipeline:
 				"filename": hit["filename"],
 				"page": int(hit["page"]),
 				"chunk_id": hit["chunk_id"],
+				"section_path": hit.get("section_path"),
+				"element_type": hit.get("element_type"),
+				"lang": hit.get("lang"),
 			}
 			passages_with_meta.append((hit["text"], meta))
 		reranked = self.reranker.rerank(query, passages_with_meta, top_n=15)
 		best_score = float(reranked[0][2]) if reranked else 0.0
 		# Assemble with headers and token budget
-		header_template = "S#{serial} — {filename}, стр. {page}: "
+		header_template = "S#{serial} — {filename}, стр. {page}{section}{etype}{lang}: "
 		enc = get_tokenizer()
 		budget = max_context_tokens
 		context_parts: List[str] = []
@@ -77,7 +97,16 @@ class RAGPipeline:
 		serial = 0
 		for text, meta, score in reranked:
 			serial += 1
-			header = header_template.format(serial=serial, filename=meta["filename"], page=meta["page"])
+			section_suffix = ""
+			if "section_path" in meta and meta.get("section_path"):
+				section_suffix = f", {meta['section_path']}"
+			etype_suffix = ""
+			if meta.get("element_type"):
+				etype_suffix = f" [{meta['element_type']}]"
+			lang_suffix = ""
+			if meta.get("lang") and meta.get("lang") != "other":
+				lang_suffix = f" ({meta['lang']})"
+			header = header_template.format(serial=serial, filename=meta["filename"], page=meta["page"], section=section_suffix, etype=etype_suffix, lang=lang_suffix)
 			segment = header + text
 			seg_tokens = len(enc.encode(segment))
 			if seg_tokens > budget:

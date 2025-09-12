@@ -28,6 +28,12 @@ class LanceRecord:
 	page: int
 	chunk_id: str
 	source_path: str
+	section_path: str | None = None
+	element_type: str | None = None
+	content_hash: str | None = None
+	ocr_used: bool | None = None
+	doc_id: str | None = None
+	lang: str | None = None
 
 
 class LanceDBStore:
@@ -49,7 +55,7 @@ class LanceDBStore:
 	def upsert(self, records: List[LanceRecord]) -> None:
 		if not records:
 			return
-		payload = [
+		payload_full = [
 			{
 				"id": r.id,
 				"text": r.text,
@@ -58,24 +64,67 @@ class LanceDBStore:
 				"page": int(r.page),
 				"chunk_id": r.chunk_id,
 				"source_path": r.source_path,
+				"section_path": r.section_path,
+				"element_type": r.element_type,
+				"content_hash": r.content_hash,
+				"ocr_used": r.ocr_used,
+				"doc_id": r.doc_id,
+				"lang": r.lang,
 			}
 			for r in records
 		]
+		# Минимальный набор полей для обратной совместимости схемы
+		payload_min = [
+			{
+				"id": p["id"],
+				"text": p["text"],
+				"vector": p["vector"],
+				"filename": p["filename"],
+				"page": p["page"],
+				"chunk_id": p["chunk_id"],
+				"source_path": p["source_path"],
+			}
+			for p in payload_full
+		]
 		if self.table is None:
-			self._ensure_table(sample_rows=payload[:10])
+			self._ensure_table(sample_rows=payload_full[:10])
 		# Purge existing rows for the same filenames to avoid stale duplicates
 		try:
-			fns = sorted({p.get("filename") for p in payload if p.get("filename")})
+			fns = sorted({p.get("filename") for p in payload_full if p.get("filename")})
 			for fn in fns:
 				self.table.delete(f"filename == '{fn}'")
 		except Exception:
 			pass
-		ids = [p["id"] for p in payload]
+		ids = [p["id"] for p in payload_full]
 		if len(ids) == 1:
 			self.table.delete(f"id == '{ids[0]}'")
 		elif len(ids) > 1:
 			self.table.delete(f"id in {tuple(ids)}")
-		self.table.add(payload)
+		# Пытаемся добавить с расширенными полями; при несовместимости схемы — минимальный набор
+		try:
+			self.table.add(payload_full)
+		except Exception:
+			self.table.add(payload_min)
+
+	def has_file_with_hash(self, filename: str, content_hash: str) -> bool:
+		"""Проверить, есть ли в таблице документ с таким именем и хэшем содержимого.
+
+		Использует to_pandas() только для узкого поднабора колонок; при ошибках возвращает False.
+		"""
+		if self.table is None:
+			return False
+		try:
+			df = self.table.to_pandas()
+			if df is None or df.empty:
+				return False
+			cols = set(df.columns)
+			if not {"filename", "content_hash"}.issubset(cols):
+				return False
+			sub = df[["filename", "content_hash"]].dropna()
+			mask = (sub["filename"].astype(str) == str(filename)) & (sub["content_hash"].astype(str) == str(content_hash))
+			return bool(mask.any())
+		except Exception:
+			return False
 
 	# Предкомпилированный регэксп для токенизации (unicode-слова)
 	_TOKENIZER_RE = re.compile(r"\w+", re.UNICODE)
@@ -173,13 +222,23 @@ class LanceDBStore:
 		if self.table is None:
 			return []
 		try:
-			res = (
-				self.table.search(query_vector)
-				.select(["id", "text", "vector", "filename", "page", "chunk_id", "source_path"])
-				.metric("cosine")
-				.limit(top_k)
-				.to_list()
-			)
+			# Пытаемся выбрать расширенные метаданные, при несовместимости схемы — базовый набор
+			try:
+				res = (
+					self.table.search(query_vector)
+					.select(["id", "text", "vector", "filename", "page", "chunk_id", "source_path", "section_path", "element_type", "content_hash", "ocr_used"])
+					.metric("cosine")
+					.limit(top_k)
+					.to_list()
+				)
+			except Exception:
+				res = (
+					self.table.search(query_vector)
+					.select(["id", "text", "vector", "filename", "page", "chunk_id", "source_path"])
+					.metric("cosine")
+					.limit(top_k)
+					.to_list()
+				)
 			return res or []
 		except Exception:
 			return []
