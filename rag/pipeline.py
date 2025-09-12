@@ -69,7 +69,7 @@ class RAGPipeline:
 		reranked = self.reranker.rerank(query, passages_with_meta, top_n=15)
 		best_score = float(reranked[0][2]) if reranked else 0.0
 		# Assemble with headers and token budget
-		header_template = "S#{serial} — {filename}, p.{page}: "
+		header_template = "S#{serial} — {filename}, стр. {page}: "
 		enc = get_tokenizer()
 		budget = max_context_tokens
 		context_parts: List[str] = []
@@ -157,8 +157,8 @@ class RAGPipeline:
 			"Ты — точный ассистент Retrieval‑Augmented Generation.\n"
 			"Отвечай строго, используя только раздел CONTEXT из User_Guide.pdf.\n"
 			"Если ответа нет в контексте, скажи: \"У меня недостаточно информации в руководстве, чтобы ответить.\"\n"
-			"Всегда:\n- сначала дай краткий ответ,\n- затем перечисли ключевые шаги пунктами,\n- затем укажи страницы как (S# - filename, p.X).\n"
-			"Не придумывай факты и номера страниц.\n"
+			"Всегда сначала дай краткий ответ, затем перечисли ключевые шаги пунктами.\n"
+			"Не указывай страницы, номера S# или ссылки на локальные документы.\n"
 			"Формулы оформляй в LaTeX: inline $...$, block $$...$$. Не используй кастомные обёртки.\n"
 			"Отвечай только на русском языке.\n\n"
 			f"QUESTION:\n{user_query}\n\nCONTEXT:\n{context}"

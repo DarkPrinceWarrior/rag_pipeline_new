@@ -3,7 +3,7 @@
 Retrieval-Augmented Generation over `docs/User_Guide.pdf` using:
 - Docling for PDF parsing (only Docling is used for document processing)
 - SentenceTransformers `google/embeddinggemma-300m` for embeddings
-- LanceDB for vector storage and hybrid search (vector + BM25)
+- LanceDB for vector storage and hybrid search (vector + BM25 via bm25s)
 - FlagEmbedding reranker `BAAI/bge-reranker-v2-m3`
 - OpenRouter `qwen/qwen3-30b-a3b-instruct-2507` for final answer generation
 

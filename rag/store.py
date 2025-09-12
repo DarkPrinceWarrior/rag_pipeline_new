@@ -3,10 +3,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Tuple
+import re
 
 import numpy as np
 import lancedb
-from rank_bm25 import BM25Okapi
+
+# Используем быструю реализацию BM25S при наличии
+try:
+	from bm25s import BM25 as BM25S  # type: ignore
+	_HAS_BM25S = True
+except ImportError:  # pragma: no cover - опциональная зависимость
+	BM25S = None  # type: ignore
+	_HAS_BM25S = False
 
 from .config import settings
 
@@ -55,6 +63,13 @@ class LanceDBStore:
 		]
 		if self.table is None:
 			self._ensure_table(sample_rows=payload[:10])
+		# Purge existing rows for the same filenames to avoid stale duplicates
+		try:
+			fns = sorted({p.get("filename") for p in payload if p.get("filename")})
+			for fn in fns:
+				self.table.delete(f"filename == '{fn}'")
+		except Exception:
+			pass
 		ids = [p["id"] for p in payload]
 		if len(ids) == 1:
 			self.table.delete(f"id == '{ids[0]}'")
@@ -62,39 +77,97 @@ class LanceDBStore:
 			self.table.delete(f"id in {tuple(ids)}")
 		self.table.add(payload)
 
-	def _all_texts_and_ids(self) -> Tuple[List[str], List[str]]:
-		if self.table is None:
-			return [], []
-		df = self.table.to_pandas()
-		if df is None or df.empty:
-			return [], []
-		cols = list(df.columns)
-		id_col = "id" if "id" in cols else None
-		text_col = "text" if "text" in cols else None
-		if id_col is None or text_col is None:
-			return [], []
-		df = df[[id_col, text_col]].dropna()
-		return df[id_col].astype(str).tolist(), df[text_col].astype(str).tolist()
+	# Предкомпилированный регэксп для токенизации (unicode-слова)
+	_TOKENIZER_RE = re.compile(r"\w+", re.UNICODE)
 
-	def _bm25_scores(self, query: str, candidate_ids: List[str] | None = None) -> Dict[str, float]:
-		texts, ids = self._all_texts_and_ids()
-		if not texts or not ids:
+	def _tokenize(self, text: str) -> List[str]:
+		"""Токенизация текста: unicode-слова, нижний регистр.
+
+		Без внешних зависимостей и скачиваний; подходит для русского/английского.
+		"""
+		return [m.group(0) for m in self._TOKENIZER_RE.finditer(text.lower())]
+
+	def _bm25_scores(self, query: str, candidates: List[Dict]) -> Dict[str, float]:
+		"""Вычислить BM25-оценки только для переданных кандидатов.
+
+		Исключает чтение всей таблицы и ускоряет работу при больших базах.
+		Возвращает словарь id -> нормализованный скор [0..1].
+		"""
+		if not _HAS_BM25S or not candidates:
 			return {}
-		if candidate_ids is not None:
-			cand = set(candidate_ids)
-			masked = [(t, i) for t, i in zip(texts, ids) if i in cand]
-			if not masked:
-				return {}
-			texts, ids = [m[0] for m in masked], [m[1] for m in masked]
-		tokenized_corpus = [t.lower().split() for t in texts]
+		ids: List[str] = []
+		texts: List[str] = []
+		for h in candidates:
+			hid = h.get("id")
+			txt = h.get("text")
+			if hid is None or txt is None:
+				continue
+			ids.append(str(hid))
+			texts.append(str(txt))
+		if not ids or not texts:
+			return {}
+		tokenized_corpus = [self._tokenize(t) for t in texts]
 		if not tokenized_corpus:
 			return {}
-		bm25 = BM25Okapi(tokenized_corpus)
-		scores = bm25.get_scores(query.lower().split())
-		max_s = float(np.max(scores)) if len(scores) else 1.0
+		q_tokens = self._tokenize(query)
+		if not q_tokens:
+			return {i: 0.0 for i in ids}
+		# Единообразная инициализация BM25S: BM25S() + index(corpus)
+		try:
+			bm25 = BM25S()  # type: ignore
+			bm25.index(tokenized_corpus)  # type: ignore
+		except Exception:
+			return {i: 0.0 for i in ids}
+		# Получаем баллы
+		scores_list: List[float]
+		if hasattr(bm25, "get_scores"):
+			try:
+				scores_list = list(bm25.get_scores(q_tokens=q_tokens))  # type: ignore
+			except TypeError:
+				# Некоторые версии принимают позиционный параметр
+				scores_list = list(bm25.get_scores(q_tokens))  # type: ignore
+		elif hasattr(bm25, "retrieve"):
+			try:
+				res = bm25.retrieve(q_tokens, k=len(ids))  # type: ignore
+				# Ожидаемые варианты: (indices, scores) или список пар
+				indices: List[int] = []
+				vals: List[float] = []
+				if isinstance(res, tuple) and len(res) >= 2:
+					indices, vals = list(res[0]), list(res[1])
+				elif isinstance(res, list) and res and isinstance(res[0], (list, tuple)):
+					indices = [int(x[0]) for x in res]
+					vals = [float(x[1]) for x in res]
+				else:
+					indices, vals = [], []
+				scores_list = [0.0] * len(ids)
+				for idx, val in zip(indices, vals):
+					if 0 <= idx < len(scores_list):
+						scores_list[idx] = float(val)
+			except Exception:
+				scores_list = [0.0] * len(ids)
+		elif hasattr(bm25, "query"):
+			try:
+				res = bm25.query(q_tokens, k=len(ids))  # type: ignore
+				indices: List[int] = []
+				vals: List[float] = []
+				if isinstance(res, tuple) and len(res) >= 2:
+					indices, vals = list(res[0]), list(res[1])
+				elif isinstance(res, dict) and "scores" in res and "indices" in res:
+					indices = list(res["indices"])  # type: ignore
+					vals = list(res["scores"])  # type: ignore
+				scores_list = [0.0] * len(ids)
+				for idx, val in zip(indices, vals):
+					if 0 <= idx < len(scores_list):
+						scores_list[idx] = float(val)
+			except Exception:
+				scores_list = [0.0] * len(ids)
+		else:
+			scores_list = [0.0] * len(ids)
+		# Мин-макс нормализация
+		max_s = float(np.max(scores_list)) if scores_list else 1.0
 		if max_s == 0:
 			return {ids[i]: 0.0 for i in range(len(ids))}
-		return {ids[i]: float(scores[i] / max_s) for i in range(len(ids))}
+		return {ids[i]: float(scores_list[i] / max_s) for i in range(len(ids))}
 
 	def vector_search(self, query_vector: List[float], top_k: int) -> List[Dict]:
 		if self.table is None:
@@ -123,8 +196,7 @@ class LanceDBStore:
 		vector_hits = self.vector_search(query_vector, top_k=top_k)
 		if not vector_hits:
 			return []
-		candidate_ids = [h.get("id") for h in vector_hits if h.get("id") is not None]
-		bm25_scores = self._bm25_scores(query, candidate_ids=None)
+		bm25_scores = self._bm25_scores(query, candidates=vector_hits)
 		q = np.array(query_vector, dtype=np.float32)
 		vec_scores: Dict[str, float] = {}
 		for h in vector_hits:

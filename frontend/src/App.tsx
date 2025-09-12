@@ -19,9 +19,7 @@ function CitationList2({ citations }: { citations: Citation[] }) {
       <ul>
         {bySerial.map((c) => (
           <li key={c.chunk_id}>
-            <a href={`/docs/${encodeURIComponent(c.filename)}#page=${c.page}`} target="_blank" rel="noreferrer">
-              S{c.serial} — {c.filename}, стр. {c.page}
-            </a>
+            <span>S{c.serial} — {c.filename}, стр. {c.page}</span>
           </li>
         ))}
       </ul>
@@ -255,7 +253,6 @@ function App2() {
                       >
                         {transformMath(m.content)}
                       </ReactMarkdown>
-                      <CitationList citations={m.citations || []} />
                     </>
                   ) : (
                     m.content
@@ -376,9 +373,7 @@ function CitationList({ citations }: { citations: Citation[] }) {
       <ul>
         {bySerial.map((c) => (
           <li key={c.chunk_id}>
-            <a href={`/docs/${encodeURIComponent(c.filename)}#page=${c.page}`} target="_blank" rel="noreferrer">
-              S{c.serial} — {c.filename}, стр. {c.page}
-            </a>
+            <span>S{c.serial} — {c.filename}, стр. {c.page}</span>
           </li>
         ))}
       </ul>
@@ -598,7 +593,6 @@ export default function App() {
                         >
                           {transformMath(m.content)}
                         </ReactMarkdown>
-                        <CitationList2 citations={m.citations || []} />
                       </>
                     ) : (
                       m.content
