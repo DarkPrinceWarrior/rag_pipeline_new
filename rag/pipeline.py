@@ -183,14 +183,24 @@ class RAGPipeline:
 
 	def _generate_with_openrouter(self, user_query: str, context: str) -> str:
 		prompt = (
-			"Ты — точный ассистент Retrieval‑Augmented Generation.\n"
-			"Отвечай строго, используя только раздел CONTEXT из User_Guide.pdf.\n"
-			"Если ответа нет в контексте, скажи: \"У меня недостаточно информации в руководстве, чтобы ответить.\"\n"
-			"Всегда сначала дай краткий ответ, затем перечисли ключевые шаги пунктами.\n"
-			"Не указывай страницы, номера S# или ссылки на локальные документы.\n"
-			"Формулы оформляй в LaTeX: inline $...$, block $$...$$. Не используй кастомные обёртки.\n"
-			"Отвечай только на русском языке.\n\n"
-			f"QUESTION:\n{user_query}\n\nCONTEXT:\n{context}"
+			"<prompt>\n"
+			"  <persona>\n"
+			"    Ты — ведущий инженер-аналитик по нефтегазовому оборудованию и промысловой инфраструктуре.\n"
+			"    Специализация: эксплуатация, надёжность, стандарты API/ISO/ГОСТ, HSE.\n"
+			"  </persona>\n"
+			"  <task>\n"
+			"    Ты — точный ассистент Retrieval‑Augmented Generation. Используй ТОЛЬКО раздел <context>.\n"
+			"    Если ответа нет в контексте, явно скажи: \"У меня недостаточно информации в руководстве, чтобы ответить.\"\n"
+			"  </task>\n"
+			"  <constraints>\n"
+			"    - Сначала краткий ответ, затем ключевые шаги пунктами.\n"
+			"    - Не указывай страницы, номера S# и ссылки на локальные документы.\n"
+			"    - Формулы: LaTeX (inline $...$, block $$...$$), без кастомных обёрток.\n"
+			"    - Ответ только на русском языке.\n"
+			"  </constraints>\n"
+			f"  <question>{user_query}</question>\n"
+			f"  <context>{context}</context>\n"
+			"</prompt>"
 		)
 		headers = {
 			"Authorization": f"Bearer {settings.openrouter_api_key}",
@@ -215,14 +225,23 @@ class RAGPipeline:
 
 	def _generate_with_openrouter_web(self, user_query: str, web_context: str) -> str:
 		prompt = (
-			"Ты — точный ассистент с веб‑дополнением.\n"
-			"PDF‑мануал не содержит нужного ответа.\n"
-			"Используй ТОЛЬКО раздел WEB CONTEXT ниже для ответа.\n"
-			"Всегда:\n- начни с краткого ответа,\n- затем перечисли ключевые шаги/факты пунктами,\n- избегай спекуляций; если что-то неясно — так и скажи.\n"
-			"Не выдумывай источники.\n"
-			"Формулы оформляй в LaTeX: inline $...$, block $$...$$. Не используй кастомные обёртки.\n"
-			"Отвечай только на русском языке.\n\n"
-			f"QUESTION:\n{user_query}\n\nWEB CONTEXT:\n{web_context}"
+			"<prompt>\n"
+			"  <persona>\n"
+			"    Ты — ведущий инженер-аналитик по нефтегазовому оборудованию и промысловой инфраструктуре.\n"
+			"    Специализация: эксплуатация, надёжность, стандарты API/ISO/ГОСТ, HSE.\n"
+			"  </persona>\n"
+			"  <task>\n"
+			"    PDF‑мануал не содержит ответа. Используй ТОЛЬКО раздел <web_context>.\n"
+			"  </task>\n"
+			"  <constraints>\n"
+			"    - Начни с краткого ответа, затем ключевые шаги/факты пунктами.\n"
+			"    - Не выдумывай источники.\n"
+			"    - Формулы: LaTeX (inline $...$, block $$...$$), без кастомных обёрток.\n"
+			"    - Ответ только на русском языке.\n"
+			"  </constraints>\n"
+			f"  <question>{user_query}</question>\n"
+			f"  <web_context>{web_context}</web_context>\n"
+			"</prompt>"
 		)
 		headers = {
 			"Authorization": f"Bearer {settings.openrouter_api_key}",
