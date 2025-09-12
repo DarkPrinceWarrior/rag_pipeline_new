@@ -143,3 +143,9 @@ I don't have enough information in the manual to answer.
 - Input PDF path is `docs/User_Guide.pdf` by default (adjust script or path if you change it).
 - LanceDB data persists under `lancedb_data/` (ignored by Git).
 - `.gitignore` includes typical Python and project-specific entries.
+
+## Frontend (React + TypeScript)
+- Source in `frontend/` (Vite + React 18 + TS)
+- Dev: `cd frontend && npm install && npm run dev` → open `http://localhost:5173/`
+- Build for FastAPI: `cd frontend && npm install && npm run build` then open `http://localhost:8000/`
+- Build output goes to `app/static/` and PDF is served under `/docs`.
