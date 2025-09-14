@@ -6,8 +6,10 @@ import { resolve } from 'node:path'
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: 5173,
+    port: 8501,
     strictPort: true,
+    host: true,
+    allowedHosts: ['localhost', '127.0.0.1', '0.0.0.0', "streamlit.ds-mind-lab.ru"],
     proxy: {
       // Forward API calls to FastAPI during dev to avoid CORS
       '/ask': {
