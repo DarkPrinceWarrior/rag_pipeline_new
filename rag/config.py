@@ -60,5 +60,42 @@ class Settings:
 	web_fetch_top_n: int = int(os.getenv("WEB_FETCH_TOP_N", "3"))
 	web_context_max_tokens: int = int(os.getenv("WEB_CONTEXT_MAX_TOKENS", "3200"))
 
+	# DuckDuckGo (duckduckgo_search) параметры
+	# Регион результатов (например, "wt-wt" — глобальный)
+	ddg_region: str = os.getenv("DDG_REGION", "wt-wt")
+	# Уровень безопасного поиска: off|moderate|strict
+	ddg_safesearch: str = os.getenv("DDG_SAFESEARCH", "moderate")
+	# Ограничение по времени: d|w|m|y (пусто = без ограничения)
+	ddg_timelimit: str = os.getenv("DDG_TIMELIMIT", "")
+	# Бэкенд поиска: api|html|lite
+	ddg_backend: str = os.getenv("DDG_BACKEND", "api")
+	# Альтернативный бэкенд (фолбэк при пустых результатах)
+	ddg_alt_backend: str = os.getenv("DDG_ALT_BACKEND", "html")
+	# Таймаут DDG‑сессии (секунды)
+	ddg_timeout_seconds: float = float(os.getenv("DDG_TIMEOUT", "10.0"))
+	# Прокси для DDG, строка URL (опционально), например socks5://127.0.0.1:9150
+	ddg_proxy: str = os.getenv("DDG_PROXY", "")
+
+	# HTTP-запросы к веб‑страницам
+	web_http_timeout_seconds: float = float(os.getenv("WEB_HTTP_TIMEOUT", "10.0"))
+	web_http_verify_tls: bool = os.getenv("WEB_HTTP_VERIFY_TLS", "true").lower() in ("1", "true", "yes")
+	web_user_agent: str = os.getenv(
+		"WEB_USER_AGENT",
+		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+		"AppleWebKit/537.36 (KHTML, like Gecko) "
+		"Chrome/124.0 Safari/537.36",
+	)
+	# Максимальная длина извлекаемого текста со страницы (символы)
+	web_fetch_max_chars: int = int(os.getenv("WEB_FETCH_MAX_CHARS", "4000"))
+
+	# Фильтрация результатов веб-поиска
+	web_search_filter_enabled: bool = os.getenv("WEB_SEARCH_FILTER_ENABLED", "true").lower() in ("1", "true", "yes")
+	web_search_stopwords_ru: str = os.getenv(
+		"WEB_SEARCH_STOPWORDS_RU",
+		"что,такое,кто,где,зачем,как,почему,это,есть,и,или,в,на,по,за,из,для,про,от,до,над,под,с,со,об,обо,у,же,ли",
+	)
+	web_search_min_token_len: int = int(os.getenv("WEB_SEARCH_MIN_TOKEN_LEN", "3"))
+	web_search_required_token_matches: int = int(os.getenv("WEB_SEARCH_REQUIRED_TOKEN_MATCHES", "1"))
+
 
 settings = Settings()
