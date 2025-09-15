@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 import httpx
-from duckduckgo_search import DDGS
+from tavily import TavilyClient
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 
 from .config import settings
@@ -39,83 +39,51 @@ def _normalize_url(url: str) -> str:
         return url
 
 
+_tavily_client: Optional[TavilyClient] = None
+
+
+def _get_tavily_client() -> TavilyClient:
+    global _tavily_client
+    if _tavily_client is None:
+        _tavily_client = TavilyClient(api_key=settings.tavily_api_key)
+    return _tavily_client
+
+
 def web_search(query: str, max_results: int = 5, timeout: float = 10.0) -> List[WebResult]:
-    region = settings.ddg_region
-    safesearch = settings.ddg_safesearch
-    timelimit = settings.ddg_timelimit or None
-    backend = settings.ddg_backend
-    timeout = settings.ddg_timeout_seconds if timeout is None else timeout
-    proxy = settings.ddg_proxy or None
-    # Подготовка токенов запроса для фильтрации нерелевантных словарных результатов
+    # Подготовка токенов запроса для фильтрации нерелевантных результатов
     filter_enabled = settings.web_search_filter_enabled
     normalized_query = re.sub(r"[^\w\sА-Яа-яЁё-]", " ", query).lower()
     raw_tokens = [t for t in re.split(r"\s+", normalized_query) if t]
     stopwords = {w.strip() for w in settings.web_search_stopwords_ru.split(",") if w.strip()}
     tokens = [t for t in raw_tokens if t not in stopwords and len(t) >= settings.web_search_min_token_len]
 
-    def run_search(backend_name: str) -> List[WebResult]:
-        results: List[WebResult] = []
-        try:
-            ctx = None
-            if proxy:
-                try:
-                    ctx = DDGS(timeout=timeout, proxies=proxy)  # type: ignore[arg-type]
-                except TypeError:
-                    try:
-                        ctx = DDGS(timeout=timeout, proxy=proxy)  # older versions
-                    except TypeError:
-                        ctx = DDGS(timeout=timeout)
-            else:
-                ctx = DDGS(timeout=timeout)
-
-            with ctx as ddgs:  # type: ignore[var-annotated]
-                seen: set[str] = set()
-                try:
-                    iter_results = ddgs.text(
-                        query,
-                        region=region,
-                        safesearch=safesearch,
-                        timelimit=timelimit,
-                        backend=backend_name,
-                        max_results=max_results,
-                    )  # type: ignore
-                except TypeError:
-                    # Обратная совместимость для старых версий без параметра backend
-                    iter_results = ddgs.text(
-                        query,
-                        region=region,
-                        safesearch=safesearch,
-                        timelimit=timelimit,
-                        max_results=max_results,
-                    )  # type: ignore
-
-                for r in iter_results:
-                    title = r.get("title") or ""
-                    url = r.get("href") or r.get("url") or ""
-                    if not url:
-                        continue
-                    norm_url = _normalize_url(url)
-                    if norm_url in seen:
-                        continue
-                    seen.add(norm_url)
-                    snippet = r.get("body") or r.get("snippet") or ""
-                    # Фильтрация по наличию терминов из запроса в заголовке/сниппете/URL
-                    if filter_enabled and tokens:
-                        hay = f"{title} {snippet} {norm_url}".lower()
-                        num_hits = sum(1 for t in tokens if t in hay)
-                        if num_hits < settings.web_search_required_token_matches:
-                            continue
-                    results.append(
-                        WebResult(title=_clean_text(title), url=norm_url, snippet=_clean_text(snippet))
-                    )
-        except Exception:
-            return results
+    results: List[WebResult] = []
+    try:
+        client = _get_tavily_client()
+        # search_depth can be "basic" or "advanced"; keep basic for speed
+        resp = client.search(query=query, search_depth="basic", max_results=max_results)
+        items = resp.get("results", []) if isinstance(resp, dict) else []
+        seen: set[str] = set()
+        for r in items:
+            title = (r.get("title") or "").strip()
+            url = (r.get("url") or "").strip()
+            if not url:
+                continue
+            norm_url = _normalize_url(url)
+            if norm_url in seen:
+                continue
+            seen.add(norm_url)
+            # Tavily returns page content snippet in `content`
+            snippet = (r.get("content") or r.get("snippet") or "").strip()
+            if filter_enabled and tokens:
+                hay = f"{title} {snippet} {norm_url}".lower()
+                num_hits = sum(1 for t in tokens if t in hay)
+                if num_hits < settings.web_search_required_token_matches:
+                    continue
+            results.append(WebResult(title=_clean_text(title), url=norm_url, snippet=_clean_text(snippet)))
+    except Exception:
         return results
-
-    out = run_search(backend)
-    if not out and backend != settings.ddg_alt_backend:
-        out = run_search(settings.ddg_alt_backend)
-    return out
+    return results
 
 
 def fetch_page_text(url: str, timeout: float = 10.0, max_chars: int = 4000) -> Optional[str]:

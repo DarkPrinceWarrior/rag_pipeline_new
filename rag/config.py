@@ -17,6 +17,8 @@ def get_env(name: str, default: str | None = None) -> str:
 class Settings:
 	openrouter_api_key: str = get_env("OPENROUTER_API_KEY")
 	hf_token: str = get_env("HF_TOKEN")
+	# Tavily
+	tavily_api_key: str = get_env("TAVILY_API_KEY")
 	lancedb_path: str = os.getenv("LANCEDB_PATH", "./lancedb_data")
 	lancedb_table: str = os.getenv("LANCEDB_TABLE", "user_guide")
 
@@ -60,21 +62,7 @@ class Settings:
 	web_fetch_top_n: int = int(os.getenv("WEB_FETCH_TOP_N", "3"))
 	web_context_max_tokens: int = int(os.getenv("WEB_CONTEXT_MAX_TOKENS", "3200"))
 
-	# DuckDuckGo (duckduckgo_search) параметры
-	# Регион результатов (например, "wt-wt" — глобальный)
-	ddg_region: str = os.getenv("DDG_REGION", "wt-wt")
-	# Уровень безопасного поиска: off|moderate|strict
-	ddg_safesearch: str = os.getenv("DDG_SAFESEARCH", "moderate")
-	# Ограничение по времени: d|w|m|y (пусто = без ограничения)
-	ddg_timelimit: str = os.getenv("DDG_TIMELIMIT", "")
-	# Бэкенд поиска: api|html|lite
-	ddg_backend: str = os.getenv("DDG_BACKEND", "api")
-	# Альтернативный бэкенд (фолбэк при пустых результатах)
-	ddg_alt_backend: str = os.getenv("DDG_ALT_BACKEND", "html")
-	# Таймаут DDG‑сессии (секунды)
-	ddg_timeout_seconds: float = float(os.getenv("DDG_TIMEOUT", "10.0"))
-	# Прокси для DDG, строка URL (опционально), например socks5://127.0.0.1:9150
-	ddg_proxy: str = os.getenv("DDG_PROXY", "")
+	# DuckDuckGo настройки удалены; используем Tavily API
 
 	# HTTP-запросы к веб‑страницам
 	web_http_timeout_seconds: float = float(os.getenv("WEB_HTTP_TIMEOUT", "10.0"))
