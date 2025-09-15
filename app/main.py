@@ -41,13 +41,17 @@ class AskResponse(BaseModel):
 
 @app.post("/ask", response_model=AskResponse)
 async def ask(req: AskRequest) -> AskResponse:
-	# Route based on explicit UI flag. No automatic fallback.
-	if req.web_search:
-		res = pipeline.answer_web(req.query)
-	else:
-		# Clamp top_k to at least 1
-		tk = req.top_k if (req.top_k and req.top_k >= 1) else 5
-		res = pipeline.answer_internal(req.query, top_k=int(tk))
+	# Docs-first: try internal docs. Only if insufficient and web_search is enabled -> web.
+	# Clamp top_k to at least 1
+	tk = req.top_k if (req.top_k and req.top_k >= 1) else 5
+	res = pipeline.answer_internal(req.query, top_k=int(tk))
+	try:
+		ans_text = (res.get("answer") or "").strip()
+		insufficient = pipeline.is_insufficient_answer(ans_text)
+		if insufficient and req.web_search:
+			res = pipeline.answer_web(req.query)
+	except Exception:
+		pass
 	# Developer telemetry (not returned to client)
 	try:
 		telemetry = res.pop("_telemetry", None)

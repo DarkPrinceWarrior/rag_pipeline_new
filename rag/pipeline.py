@@ -175,6 +175,25 @@ class RAGPipeline:
 			"latency_ms": latency_ms,
 		}
 
+	def is_insufficient_answer(self, answer: str) -> bool:
+		"""Heuristic detection that the LLM declared lack of info in the manual.
+
+		Returns True if the answer indicates the manual lacks sufficient info.
+		"""
+		try:
+			text = (answer or "").strip().lower()
+			if not text:
+				return True
+			# Phrase emitted per system prompt when docs lack info
+			if "недостаточно информации в руководстве" in text:
+				return True
+			# Built-in internal fallback text when we had zero context
+			if "ответ не найден в документах" in text:
+				return True
+			return False
+		except Exception:
+			return False
+
 	def answer_internal(self, query: str, top_k: int = 5) -> Dict:
 		start = time.time()
 		qv = self.embedder.embed_query(query)
