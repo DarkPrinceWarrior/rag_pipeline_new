@@ -1,6 +1,7 @@
 export type AskRequest = {
   query: string
   top_k?: number
+  web_search?: boolean
 }
 
 export type Citation = {

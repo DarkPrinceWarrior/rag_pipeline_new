@@ -55,13 +55,20 @@ The chat UI supports:
 - Markdown rendering with code highlighting
 - Clickable citations opening the PDF page
 - Russian UI labels and editing of your messages
-- Top‑K slider with persistent value (localStorage)
+- Modes: internal (manual only) and web search only (checkbox in settings)
+- Top‑K slider with persistent value (applies to internal mode only)
 
-7) Ask a question (REST example)
+7) Ask a question (REST examples)
 ```bat
 curl -X POST http://localhost:8000/ask ^
   -H "Content-Type: application/json" ^
-  -d "{\"query\":\"Where do I manage Favorites on the Home Page?\",\"top_k\":100}"
+  -d "{\"query\":\"Where do I manage Favorites on the Home Page?\",\"top_k\":5,\"web_search\":false}"
+```
+
+```bat
+curl -X POST http://localhost:8000/ask ^
+  -H "Content-Type: application/json" ^
+  -d "{\"query\":\"Новости по стандарту API 6A 2024\",\"web_search\":true}"
 ```
 
 ## Project layout
@@ -122,25 +129,22 @@ Use `env.example` as a reference.
 - Context assembly: заголовки вида `S#{serial} — {filename}, стр. {page}, {section_path} [element_type] (lang):` с токенным бюджетом ~3500.
 - Generation: OpenRouter `qwen/qwen3-30b-a3b-instruct-2507` отвечает строго по CONTEXT.
 
-If the answer is not found in the context, the system responds with:
+If the answer is not found in the context (internal mode), the system responds with:
 ```
-I don't have enough information in the manual to answer.
+Ответ не найден в документах.
 ```
 
-### Web fallback (optional)
-If the manual lacks sufficient information, an automatic web search fallback can run. When triggered, the assistant clearly states in the UI:
+### Web mode
+When web mode is selected, only internet search is used. If no results are found, the answer is:
 
 ```
-В мануале нет данных — ищем в интернете.
+Ответ не найден в интернете.
 ```
 
 Configuration (env):
-- `ENABLE_WEB_FALLBACK=true`
-- `MANUAL_MIN_RERANK_SCORE=0.35` (fallback if reranker confidence is below)
-- `MANUAL_MIN_CONTEXT_TOKENS=120` (fallback if too little manual context)
-- `WEB_SEARCH_MAX_RESULTS=5` (search results to consider)
-- `WEB_FETCH_TOP_N=3` (pages to fetch for richer context)
-- `WEB_CONTEXT_MAX_TOKENS=3200` (budget for web context)
+- `WEB_SEARCH_MAX_RESULTS=5`
+- `WEB_FETCH_TOP_N=3`
+- `WEB_CONTEXT_MAX_TOKENS=3200`
 
 ## API
 - Endpoint: `POST /ask`

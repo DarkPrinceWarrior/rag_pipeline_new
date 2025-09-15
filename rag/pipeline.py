@@ -162,13 +162,7 @@ class RAGPipeline:
 			)
 			if web_ctx:
 				generated = self._generate_with_openrouter_web(query, web_ctx)
-				notice = "В мануале нет данных — ищем в интернете.\n\n"
-				sources_lines = []
-				for r in web_results[: settings.web_fetch_top_n]:
-					title = r.title or r.url
-					sources_lines.append(f"- [{title}]({r.url})")
-				sources_md = ("\n\nИсточники:\n" + "\n".join(sources_lines)) if sources_lines else ""
-				answer = notice + generated + sources_md
+				answer = generated
 				citations = []
 			else:
 				answer = self._generate_with_openrouter(query, context)
@@ -179,6 +173,82 @@ class RAGPipeline:
 			"answer": answer,
 			"citations": [c.__dict__ for c in citations],
 			"latency_ms": latency_ms,
+		}
+
+	def answer_internal(self, query: str, top_k: int = 5) -> Dict:
+		start = time.time()
+		qv = self.embedder.embed_query(query)
+		candidates = self.store.hybrid_search(query, qv, top_k=top_k, weights=(0.8, 0.2))
+		context, citations, best_score, context_tokens = self._assemble_context(query, candidates, max_context_tokens=3500)
+		if (not candidates) or (not context) or context_tokens <= 0:
+			latency_ms = int((time.time() - start) * 1000)
+			telemetry = {
+				"selected_mode": "internal",
+				"query": query,
+				"top_k": top_k,
+				"num_candidates": len(candidates),
+				"best_score": float(best_score) if isinstance(best_score, (int, float)) else 0.0,
+				"context_tokens": int(context_tokens),
+			}
+			return {
+				"answer": "Ответ не найден в документах.",
+				"citations": [],
+				"latency_ms": latency_ms,
+				"_telemetry": telemetry,
+			}
+		answer = self._generate_with_openrouter(query, context)
+		latency_ms = int((time.time() - start) * 1000)
+		telemetry = {
+			"selected_mode": "internal",
+			"query": query,
+			"top_k": top_k,
+			"num_candidates": len(candidates),
+			"best_score": float(best_score) if isinstance(best_score, (int, float)) else 0.0,
+			"context_tokens": int(context_tokens),
+			"num_citations": len(citations),
+		}
+		return {
+			"answer": answer,
+			"citations": [c.__dict__ for c in citations],
+			"latency_ms": latency_ms,
+			"_telemetry": telemetry,
+		}
+
+	def answer_web(self, query: str) -> Dict:
+		start = time.time()
+		web_ctx, web_results = build_web_context(
+			query,
+			max_results=settings.web_search_max_results,
+			fetch_top_n=settings.web_fetch_top_n,
+			max_tokens=settings.web_context_max_tokens,
+		)
+		if not web_ctx:
+			latency_ms = int((time.time() - start) * 1000)
+			telemetry = {
+				"selected_mode": "web",
+				"query": query,
+				"num_web_results": len(web_results),
+			}
+			return {
+				"answer": "Ответ не найден в интернете.",
+				"citations": [],
+				"latency_ms": latency_ms,
+				"_telemetry": telemetry,
+			}
+		generated = self._generate_with_openrouter_web(query, web_ctx)
+		answer = generated
+		latency_ms = int((time.time() - start) * 1000)
+		telemetry = {
+			"selected_mode": "web",
+			"query": query,
+			"num_web_results": len(web_results),
+			"web_result_urls": [r.url for r in web_results],
+		}
+		return {
+			"answer": answer,
+			"citations": [],
+			"latency_ms": latency_ms,
+			"_telemetry": telemetry,
 		}
 
 	def _generate_with_openrouter(self, user_query: str, context: str) -> str:

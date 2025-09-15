@@ -29,7 +29,8 @@ pipeline = RAGPipeline()
 
 class AskRequest(BaseModel):
 	query: str
-	top_k: Optional[int] = 100
+	top_k: Optional[int] = 5
+	web_search: Optional[bool] = False
 
 
 class AskResponse(BaseModel):
@@ -40,7 +41,20 @@ class AskResponse(BaseModel):
 
 @app.post("/ask", response_model=AskResponse)
 async def ask(req: AskRequest) -> AskResponse:
-	res = pipeline.answer(req.query, top_k=req.top_k or 100)
+	# Route based on explicit UI flag. No automatic fallback.
+	if req.web_search:
+		res = pipeline.answer_web(req.query)
+	else:
+		# Clamp top_k to at least 1
+		tk = req.top_k if (req.top_k and req.top_k >= 1) else 5
+		res = pipeline.answer_internal(req.query, top_k=int(tk))
+	# Developer telemetry (not returned to client)
+	try:
+		telemetry = res.pop("_telemetry", None)
+		if telemetry:
+			print(f"[telemetry] {telemetry}")
+	except Exception:
+		pass
 	return AskResponse(**res)
 
 

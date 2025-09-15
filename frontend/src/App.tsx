@@ -6,6 +6,15 @@ import rehypeKatex from 'rehype-katex'
 import 'katex/dist/katex.min.css'
 import type { AskRequest, AskResponse, Citation } from './types'
 
+function useAutosize(ref: React.RefObject<HTMLTextAreaElement>, value: string) {
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = el.scrollHeight + 'px'
+  }, [ref, value])
+}
+
 function useApiBase2() {
   return ''
 }
@@ -43,9 +52,13 @@ function App2() {
   const [query, setQuery] = useState('')
   const [topK, setTopK] = useState(() => {
     const saved = localStorage.getItem('top_k')
-    return saved ? parseInt(saved) : 100
+    return saved ? parseInt(saved) : 5
   })
   const [loading, setLoading] = useState(false)
+  const [webSearch, setWebSearch] = useState(() => {
+    const saved = localStorage.getItem('web_search')
+    return saved ? saved === 'true' : false
+  })
   const [error, setError] = useState<string | null>(null)
   const [messages, setMessages] = useState<ChatMessage2[]>([])
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
@@ -64,6 +77,10 @@ function App2() {
   useEffect(() => {
     localStorage.setItem('top_k', String(topK))
   }, [topK])
+
+  useEffect(() => {
+    localStorage.setItem('web_search', String(webSearch))
+  }, [webSearch])
 
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
@@ -110,7 +127,7 @@ function App2() {
       return next.slice(0, index + 1)
     })
     try {
-      const req: AskRequest = { query: q, top_k: topK }
+      const req: AskRequest = webSearch ? { query: q, web_search: true } : { query: q, top_k: topK, web_search: false }
       const resp = await fetch(`${apiBase}/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -140,7 +157,7 @@ function App2() {
     setMessages((prev) => [...prev, { role: 'user', content: q }])
     setQuery('')
     try {
-      const req: AskRequest = { query: q, top_k: topK }
+      const req: AskRequest = webSearch ? { query: q, web_search: true } : { query: q, top_k: topK, web_search: false }
       const resp = await fetch(`${apiBase}/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -335,6 +352,17 @@ function App2() {
               {settingsOpen && (
                 <div ref={panelRef} className="settings-panel" role="dialog" aria-label="Настройки чата">
                   <div className="settings-row">
+                    <div className="settings-label">Веб-поиск</div>
+                    <label className="switch">
+                      <input
+                        type="checkbox"
+                        checked={webSearch}
+                        onChange={(e) => setWebSearch(e.target.checked)}
+                      />
+                      <span className="slider-switch"></span>
+                    </label>
+                  </div>
+                  <div className="settings-row">
                     <div className="settings-label">top_k</div>
                     <div className="settings-value">{topK}</div>
                   </div>
@@ -342,11 +370,12 @@ function App2() {
                     aria-label="top_k"
                     className="slider"
                     type="range"
-                    min={10}
+                    min={1}
                     max={200}
-                    step={10}
+                    step={1}
                     value={topK}
                     onChange={(e) => setTopK(parseInt(e.target.value))}
+                    disabled={webSearch}
                   />
                 </div>
               )}
@@ -388,7 +417,7 @@ export default function App() {
   const [query, setQuery] = useState('')
   const [topK, setTopK] = useState(() => {
     const saved = localStorage.getItem('top_k')
-    return saved ? parseInt(saved) : 100
+    return saved ? parseInt(saved) : 5
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -396,19 +425,32 @@ export default function App() {
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editingDraft, setEditingDraft] = useState('')
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const editRef = useRef<HTMLTextAreaElement>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const gearRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const bubbleRefs = useRef<Record<number, HTMLDivElement | null>>({})
   const [userMinWidths, setUserMinWidths] = useState<Record<number, number>>({})
+  const [webSearch, setWebSearch] = useState(() => {
+    const saved = localStorage.getItem('web_search')
+    return saved ? saved === 'true' : false
+  })
 
   useEffect(() => {
     inputRef.current?.focus()
   }, [])
 
+  // Autosize for composer input (both hero and sticky composer reuse same ref)
+  useAutosize(inputRef, query)
+  // Autosize for inline editor
+  useAutosize(editRef, editingDraft)
+
   useEffect(() => {
     localStorage.setItem('top_k', String(topK))
   }, [topK])
+  useEffect(() => {
+    localStorage.setItem('web_search', String(webSearch))
+  }, [webSearch])
 
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
@@ -449,7 +491,7 @@ export default function App() {
       return next.slice(0, index + 1)
     })
     try {
-      const req: AskRequest = { query: q, top_k: topK }
+      const req: AskRequest = webSearch ? { query: q, web_search: true } : { query: q, top_k: topK, web_search: false }
       const resp = await fetch(`${apiBase}/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -479,7 +521,7 @@ export default function App() {
     setMessages((prev) => [...prev, { role: 'user', content: q }])
     setQuery('')
     try {
-      const req: AskRequest = { query: q, top_k: topK }
+      const req: AskRequest = webSearch ? { query: q, web_search: true } : { query: q, top_k: topK, web_search: false }
       const resp = await fetch(`${apiBase}/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -535,11 +577,22 @@ export default function App() {
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/>
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c0 .66.26 1.3.73 1.77.47.47 1.11.73 1.77.73H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06-.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c0 .66.26 1.3.73 1.77.47.47 1.11.73 1.77.73H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
                   </svg>
                 </button>
                 {settingsOpen && (
                   <div ref={panelRef} className="settings-panel" role="dialog" aria-label="Настройки чата">
+                    <div className="settings-row">
+                      <div className="settings-label">Веб-поиск</div>
+                      <label className="switch">
+                        <input
+                          type="checkbox"
+                          checked={webSearch}
+                          onChange={(e) => setWebSearch(e.target.checked)}
+                        />
+                        <span className="slider-switch"></span>
+                      </label>
+                    </div>
                     <div className="settings-row">
                       <div className="settings-label">top_k</div>
                       <div className="settings-value">{topK}</div>
@@ -548,9 +601,9 @@ export default function App() {
                       aria-label="top_k"
                       className="slider"
                       type="range"
-                      min={10}
+                      min={1}
                       max={200}
-                      step={10}
+                      step={1}
                       value={topK}
                       onChange={(e) => setTopK(parseInt(e.target.value))}
                     />
@@ -575,6 +628,7 @@ export default function App() {
                     {m.role === 'user' && editingIndex === i ? (
                       <div className="inline-editor">
                         <textarea
+                          ref={editRef}
                           value={editingDraft}
                           onChange={(e) => setEditingDraft(e.target.value)}
                           placeholder="Измените сообщение..."
@@ -659,11 +713,22 @@ export default function App() {
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/>
-                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c0 .66.26 1.3.73 1.77.47.47 1.11.73 1.77.73H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06-.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c0 .66.26 1.3.73 1.77.47.47 1.11.73 1.77.73H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
                 </svg>
               </button>
               {settingsOpen && (
                 <div ref={panelRef} className="settings-panel" role="dialog" aria-label="Настройки чата">
+                  <div className="settings-row">
+                    <div className="settings-label">Веб-поиск</div>
+                    <label className="switch">
+                      <input
+                        type="checkbox"
+                        checked={webSearch}
+                        onChange={(e) => setWebSearch(e.target.checked)}
+                      />
+                      <span className="slider-switch"></span>
+                    </label>
+                  </div>
                   <div className="settings-row">
                     <div className="settings-label">top_k</div>
                     <div className="settings-value">{topK}</div>
@@ -672,11 +737,12 @@ export default function App() {
                     aria-label="top_k"
                     className="slider"
                     type="range"
-                    min={10}
+                    min={1}
                     max={200}
-                    step={10}
+                    step={1}
                     value={topK}
                     onChange={(e) => setTopK(parseInt(e.target.value))}
+                    disabled={webSearch}
                   />
                 </div>
               )}
