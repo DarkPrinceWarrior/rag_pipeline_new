@@ -52,7 +52,7 @@ function App2() {
   const [query, setQuery] = useState('')
   const [topK, setTopK] = useState(() => {
     const saved = localStorage.getItem('top_k')
-    return saved ? parseInt(saved) : 5
+    return saved ? parseInt(saved) : 200
   })
   const [loading, setLoading] = useState(false)
   const [webSearch, setWebSearch] = useState(() => {
@@ -127,7 +127,7 @@ function App2() {
       return next.slice(0, index + 1)
     })
     try {
-      const req: AskRequest = webSearch ? { query: q, web_search: true } : { query: q, top_k: topK, web_search: false }
+      const req: AskRequest = { query: q, top_k: topK, web_search: webSearch }
       const resp = await fetch(`${apiBase}/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -157,7 +157,7 @@ function App2() {
     setMessages((prev) => [...prev, { role: 'user', content: q }])
     setQuery('')
     try {
-      const req: AskRequest = webSearch ? { query: q, web_search: true } : { query: q, top_k: topK, web_search: false }
+      const req: AskRequest = { query: q, top_k: topK, web_search: webSearch }
       const resp = await fetch(`${apiBase}/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -375,7 +375,6 @@ function App2() {
                     step={1}
                     value={topK}
                     onChange={(e) => setTopK(parseInt(e.target.value))}
-                    disabled={webSearch}
                   />
                 </div>
               )}
@@ -417,7 +416,7 @@ export default function App() {
   const [query, setQuery] = useState('')
   const [topK, setTopK] = useState(() => {
     const saved = localStorage.getItem('top_k')
-    return saved ? parseInt(saved) : 5
+    return saved ? parseInt(saved) : 200
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -491,7 +490,7 @@ export default function App() {
       return next.slice(0, index + 1)
     })
     try {
-      const req: AskRequest = webSearch ? { query: q, web_search: true } : { query: q, top_k: topK, web_search: false }
+      const req: AskRequest = { query: q, top_k: topK, web_search: webSearch }
       const resp = await fetch(`${apiBase}/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -521,7 +520,7 @@ export default function App() {
     setMessages((prev) => [...prev, { role: 'user', content: q }])
     setQuery('')
     try {
-      const req: AskRequest = webSearch ? { query: q, web_search: true } : { query: q, top_k: topK, web_search: false }
+      const req: AskRequest = { query: q, top_k: topK, web_search: webSearch }
       const resp = await fetch(`${apiBase}/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

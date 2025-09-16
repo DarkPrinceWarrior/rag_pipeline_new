@@ -60,8 +60,16 @@ def web_search(query: str, max_results: int = 5, timeout: float = 10.0) -> List[
     results: List[WebResult] = []
     try:
         client = _get_tavily_client()
-        # search_depth can be "basic" or "advanced"; keep basic for speed
-        resp = client.search(query=query, search_depth="basic", max_results=max_results)
+        # Префиксируем запрос профессиональной ролью из настроек
+        prefixed_query = f"{settings.web_search_query_prefix} {query}".strip()
+        # Расширенные параметры поиска
+        resp = client.search(
+            query=prefixed_query,
+            search_depth=settings.web_search_depth,
+            max_results=max_results,
+            include_raw_content=settings.web_search_include_raw_content,
+            chunks_per_source=settings.web_search_chunks_per_source,
+        )
         items = resp.get("results", []) if isinstance(resp, dict) else []
         seen: set[str] = set()
         for r in items:

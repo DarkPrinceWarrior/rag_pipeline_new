@@ -54,13 +54,24 @@ class Settings:
 	rerank_section_depth_penalty: float = float(os.getenv("RERANK_SECTION_DEPTH_PENALTY", "0.01"))
 	rerank_max_meta_bonus: float = float(os.getenv("RERANK_MAX_META_BONUS", "0.15"))
 
+	# По умолчанию количество кандидатов для поиска в БД
+	default_top_k: int = int(os.getenv("DEFAULT_TOP_K", "200"))
+
 	# Web fallback configuration
 	enable_web_fallback: bool = os.getenv("ENABLE_WEB_FALLBACK", "true").lower() in ("1", "true", "yes")
 	manual_min_rerank_score: float = float(os.getenv("MANUAL_MIN_RERANK_SCORE", "0.35"))
 	manual_min_context_tokens: int = int(os.getenv("MANUAL_MIN_CONTEXT_TOKENS", "120"))
-	web_search_max_results: int = int(os.getenv("WEB_SEARCH_MAX_RESULTS", "5"))
+	web_search_max_results: int = int(os.getenv("WEB_SEARCH_MAX_RESULTS", "10"))
 	web_fetch_top_n: int = int(os.getenv("WEB_FETCH_TOP_N", "3"))
 	web_context_max_tokens: int = int(os.getenv("WEB_CONTEXT_MAX_TOKENS", "3200"))
+	# Параметры Tavily поиска
+	web_search_query_prefix: str = os.getenv(
+		"WEB_SEARCH_QUERY_PREFIX",
+		"Ты — ведущий инженер-аналитик в нефтегазовой отрасли."
+	)
+	web_search_depth: str = os.getenv("WEB_SEARCH_DEPTH", "advanced")
+	web_search_include_raw_content: str = os.getenv("WEB_SEARCH_INCLUDE_RAW_CONTENT", "markdown")
+	web_search_chunks_per_source: int = int(os.getenv("WEB_SEARCH_CHUNKS_PER_SOURCE", "5"))
 
 	# DuckDuckGo настройки удалены; используем Tavily API
 

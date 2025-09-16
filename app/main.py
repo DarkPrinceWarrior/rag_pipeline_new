@@ -11,6 +11,7 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from rag.pipeline import RAGPipeline
+from rag.config import settings
 
 app = FastAPI(title="UserGuide-RAG-with-LanceDB")
 
@@ -29,7 +30,7 @@ pipeline = RAGPipeline()
 
 class AskRequest(BaseModel):
 	query: str
-	top_k: Optional[int] = 5
+	top_k: Optional[int] = None
 	web_search: Optional[bool] = False
 
 
@@ -42,9 +43,9 @@ class AskResponse(BaseModel):
 @app.post("/ask", response_model=AskResponse)
 async def ask(req: AskRequest) -> AskResponse:
 	# Docs-first: try internal docs. Only if insufficient and web_search is enabled -> web.
-	# Clamp top_k to at least 1
-	tk = req.top_k if (req.top_k and req.top_k >= 1) else 5
-	res = pipeline.answer_internal(req.query, top_k=int(tk))
+	# Clamp top_k to at least 1, fallback to settings.default_top_k
+	tk = int(req.top_k) if (req.top_k and req.top_k >= 1) else int(getattr(settings, "default_top_k", 200))
+	res = pipeline.answer_internal(req.query, top_k=tk)
 	try:
 		ans_text = (res.get("answer") or "").strip()
 		insufficient = pipeline.is_insufficient_answer(ans_text)
