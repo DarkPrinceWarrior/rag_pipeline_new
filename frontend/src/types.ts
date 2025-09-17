@@ -1,5 +1,6 @@
 export type AskRequest = {
   query: string
+  session_id?: string
   top_k?: number
   web_search?: boolean
 }

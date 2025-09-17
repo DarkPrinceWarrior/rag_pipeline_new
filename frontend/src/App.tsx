@@ -229,7 +229,7 @@ export default function App() {
       })
     )
     try {
-      const req: AskRequest = { query: q, top_k: topK, web_search: webSearch }
+      const req: AskRequest = { query: q, session_id: activeChatId, top_k: topK, web_search: webSearch }
       const resp = await fetch(`${apiBase}/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -278,7 +278,7 @@ export default function App() {
     )
     setQuery('')
     try {
-      const req: AskRequest = { query: q, top_k: topK, web_search: webSearch }
+      const req: AskRequest = { query: q, session_id: activeChatId, top_k: topK, web_search: webSearch }
       const resp = await fetch(`${apiBase}/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

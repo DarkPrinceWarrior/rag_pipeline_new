@@ -152,7 +152,9 @@ Configuration (env):
 ```json
 {
   "query": "string",
-  "top_k": 100
+  "session_id": "chat-session-uuid",
+  "top_k": 100,
+  "web_search": false
 }
 ```
 - Response JSON:

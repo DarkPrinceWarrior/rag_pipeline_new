@@ -51,6 +51,15 @@ class Settings:
 	# Нормализация L2 для косинусной близости
 	memory_vector_normalize_l2: bool = os.getenv("MEMORY_VECTOR_NORMALIZE_L2", "true").lower() in ("1", "true", "yes")
 
+	# Диалоговая память (история)
+	conversation_enabled: bool = os.getenv("CONVERSATION_ENABLED", "true").lower() in ("1", "true", "yes")
+	conversation_max_turns: int = int(os.getenv("CONVERSATION_MAX_TURNS", "10"))
+	conversation_table: str = os.getenv("CONVERSATION_TABLE", "conversations")
+	conversation_summary_table: str = os.getenv("CONVERSATION_SUMMARY_TABLE", "conversation_summaries")
+	conversation_summary_every_n_turns: int = int(os.getenv("CONVERSATION_SUMMARY_EVERY_N_TURNS", "4"))
+	conversation_summary_model_id: str = os.getenv("CONVERSATION_SUMMARY_MODEL_ID", os.getenv("LLM_MODEL_ID", "qwen/qwen3-30b-a3b-instruct-2507"))
+	conversation_summary_max_tokens: int = int(os.getenv("CONVERSATION_SUMMARY_MAX_TOKENS", "256"))
+
 
 
 	device: str = os.getenv("DEVICE", "cuda")

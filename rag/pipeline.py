@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 import httpx
 import re
@@ -16,6 +16,7 @@ from .reranker import Reranker
 from .store import LanceDBStore, LanceRecord
 from .utils import get_tokenizer, sliding_token_windows
 from .web_search import build_web_context
+from .conversation import ConversationStore, ConversationSummarizer
 
 
 @dataclass
@@ -34,6 +35,7 @@ class RAGPipeline:
 		self.embedder = EmbeddingModel()
 		self.reranker = Reranker()
 		self.memory = MemoryManager()
+		self.conv = ConversationStore()
 
 	def ingest_pdf(self, pdf_path: str) -> int:
 		chunks = ingest_pdf_to_chunks(pdf_path)
@@ -145,10 +147,38 @@ class RAGPipeline:
 		context_tokens = len(enc2.encode(context)) if context else 0
 		return context, citations, best_score, context_tokens
 
-	def answer(self, query: str, top_k: int = 100, user_id: str | None = None) -> Dict:
+	def _fetch_dialog_context(self, session_id: Optional[str], user_id: Optional[str]) -> str:
+		"""Формирует компактный блок истории диалога и саммари для промпта."""
+		if not session_id:
+			return ""
+		recent = self.conv.fetch_recent(session_id, limit=settings.conversation_max_turns)
+		summary = self.conv.get_summary(session_id)
+		history_section = ConversationStore.to_prompt_section(recent)
+		blocks: List[str] = []
+		if summary:
+			blocks.append(f"<dialog_summary>\n{summary}\n</dialog_summary>")
+		if history_section:
+			blocks.append(f"<dialog_history>\n{history_section}\n</dialog_history>")
+		return "\n".join(blocks)
+
+	def _maybe_update_summary(self, session_id: Optional[str]) -> None:
+		if not session_id:
+			return
+		recent = self.conv.fetch_recent(session_id, limit=settings.conversation_max_turns)
+		if not recent:
+			return
+		turn_index = len(recent)
+		if ConversationSummarizer.should_update(turn_index):
+			prev = self.conv.get_summary(session_id)
+			new_summary = ConversationSummarizer.summarize(prev, recent[-min(len(recent), 8):])
+			if new_summary:
+				self.conv.upsert_summary(session_id, new_summary)
+
+	def answer(self, query: str, top_k: int = 100, user_id: str | None = None, session_id: str | None = None) -> Dict:
 		start = time.time()
 		user_ref = user_id or settings.memory_default_user_id
 		memories = self.memory.fetch(query, user_ref)
+		dialog_context = self._fetch_dialog_context(session_id, user_ref)
 		qv = self.embedder.embed_query(query)
 		candidates = self.store.hybrid_search(query, qv, top_k=top_k, weights=(0.8, 0.2))
 		context, citations, best_score, context_tokens = self._assemble_context(query, candidates, max_context_tokens=3500)
@@ -166,13 +196,22 @@ class RAGPipeline:
 				max_tokens=settings.web_context_max_tokens,
 			)
 			if web_ctx:
-				generated = self._generate_with_openrouter_web(query, web_ctx, memories=memories)
+				generated = self._generate_with_openrouter_web(query, web_ctx, memories=memories, dialog_context=dialog_context)
 				answer = generated
 				citations = []
 			else:
-				answer = self._generate_with_openrouter(query, context, memories=memories)
+				answer = self._generate_with_openrouter(query, context, memories=memories, dialog_context=dialog_context)
 		else:
-			answer = self._generate_with_openrouter(query, context, memories=memories)
+			answer = self._generate_with_openrouter(query, context, memories=memories, dialog_context=dialog_context)
+		# persist conversation
+		try:
+			if session_id:
+				self.conv.append(session_id, user_ref, "user", query)
+				if answer:
+					self.conv.append(session_id, user_ref, "assistant", answer)
+				self._maybe_update_summary(session_id)
+		except Exception:
+			pass
 		latency_ms = int((time.time() - start) * 1000)
 		return {
 			"answer": answer,
@@ -199,10 +238,11 @@ class RAGPipeline:
 		except Exception:
 			return False
 
-	def answer_internal(self, query: str, top_k: int = 5, user_id: str | None = None) -> Dict:
+	def answer_internal(self, query: str, top_k: int = 5, user_id: str | None = None, session_id: str | None = None) -> Dict:
 		start = time.time()
 		user_ref = user_id or settings.memory_default_user_id
 		memories = self.memory.fetch(query, user_ref)
+		dialog_context = self._fetch_dialog_context(session_id, user_ref)
 		qv = self.embedder.embed_query(query)
 		candidates = self.store.hybrid_search(query, qv, top_k=top_k, weights=(0.8, 0.2))
 		context, citations, best_score, context_tokens = self._assemble_context(query, candidates, max_context_tokens=3500)
@@ -217,20 +257,40 @@ class RAGPipeline:
 				"context_tokens": int(context_tokens),
 				"used_memories": len(memories),
 			}
+			# Если нет doc-контекста, но есть история/мемори — отвечаем по диалогу
+			if (dialog_context and dialog_context.strip()) or memories:
+				answer_dialog = self._generate_with_openrouter(query, "", memories=memories, dialog_context=dialog_context)
+				self.memory.store_exchange(query, answer_dialog, user_ref, metadata={"mode": "internal", "reason": "dialog_only"})
+				try:
+					if session_id:
+						self.conv.append(session_id, user_ref, "user", query)
+						self.conv.append(session_id, user_ref, "assistant", answer_dialog)
+						self._maybe_update_summary(session_id)
+				except Exception:
+					pass
+				return {
+					"answer": answer_dialog,
+					"citations": [],
+					"latency_ms": latency_ms,
+					"_telemetry": telemetry,
+				}
+			# Иначе — честный fallback
 			fallback_answer = "У меня недостаточно информации в руководстве, чтобы ответить."
-			self.memory.store_exchange(
-				query,
-				fallback_answer,
-				user_ref,
-				metadata={"mode": "internal", "reason": "insufficient_context"},
-			)
+			self.memory.store_exchange(query, fallback_answer, user_ref, metadata={"mode": "internal", "reason": "insufficient_context"})
+			try:
+				if session_id:
+					self.conv.append(session_id, user_ref, "user", query)
+					self.conv.append(session_id, user_ref, "assistant", fallback_answer)
+					self._maybe_update_summary(session_id)
+			except Exception:
+				pass
 			return {
 				"answer": fallback_answer,
 				"citations": [],
 				"latency_ms": latency_ms,
 				"_telemetry": telemetry,
 			}
-		answer = self._generate_with_openrouter(query, context, memories=memories)
+		answer = self._generate_with_openrouter(query, context, memories=memories, dialog_context=dialog_context)
 		latency_ms = int((time.time() - start) * 1000)
 		telemetry = {
 			"selected_mode": "internal",
@@ -243,6 +303,13 @@ class RAGPipeline:
 			"used_memories": len(memories),
 		}
 		self.memory.store_exchange(query, answer, user_ref, metadata={"mode": "internal"})
+		try:
+			if session_id:
+				self.conv.append(session_id, user_ref, "user", query)
+				self.conv.append(session_id, user_ref, "assistant", answer)
+				self._maybe_update_summary(session_id)
+		except Exception:
+			pass
 		return {
 			"answer": answer,
 			"citations": [c.__dict__ for c in citations],
@@ -250,10 +317,11 @@ class RAGPipeline:
 			"_telemetry": telemetry,
 		}
 
-	def answer_web(self, query: str, user_id: str | None = None) -> Dict:
+	def answer_web(self, query: str, user_id: str | None = None, session_id: str | None = None) -> Dict:
 		start = time.time()
 		user_ref = user_id or settings.memory_default_user_id
 		memories = self.memory.fetch(query, user_ref)
+		dialog_context = self._fetch_dialog_context(session_id, user_ref)
 		web_ctx, web_results = build_web_context(
 			query,
 			max_results=settings.web_search_max_results,
@@ -269,19 +337,21 @@ class RAGPipeline:
 				"used_memories": len(memories),
 			}
 			fallback_answer = "??? ?? ?????? ? ?????."
-			self.memory.store_exchange(
-				query,
-				fallback_answer,
-				user_ref,
-				metadata={"mode": "web", "reason": "no_web_results"},
-			)
+			self.memory.store_exchange(query, fallback_answer, user_ref, metadata={"mode": "web", "reason": "no_web_results"})
+			try:
+				if session_id:
+					self.conv.append(session_id, user_ref, "user", query)
+					self.conv.append(session_id, user_ref, "assistant", fallback_answer)
+					self._maybe_update_summary(session_id)
+			except Exception:
+				pass
 			return {
 				"answer": fallback_answer,
 				"citations": [],
 				"latency_ms": latency_ms,
 				"_telemetry": telemetry,
 			}
-		generated = self._generate_with_openrouter_web(query, web_ctx, memories=memories)
+		generated = self._generate_with_openrouter_web(query, web_ctx, memories=memories, dialog_context=dialog_context)
 		answer = generated
 		latency_ms = int((time.time() - start) * 1000)
 		telemetry = {
@@ -292,6 +362,13 @@ class RAGPipeline:
 			"used_memories": len(memories),
 		}
 		self.memory.store_exchange(query, answer, user_ref, metadata={"mode": "web"})
+		try:
+			if session_id:
+				self.conv.append(session_id, user_ref, "user", query)
+				self.conv.append(session_id, user_ref, "assistant", answer)
+				self._maybe_update_summary(session_id)
+		except Exception:
+			pass
 		return {
 			"answer": answer,
 			"citations": [],
@@ -299,12 +376,13 @@ class RAGPipeline:
 			"_telemetry": telemetry,
 		}
 
-	def _generate_with_openrouter(self, user_query: str, context: str, memories: List[str] | None = None) -> str:
+	def _generate_with_openrouter(self, user_query: str, context: str, memories: List[str] | None = None, dialog_context: str | None = None) -> str:
 		memory_section = ""
 		if memories:
 			formatted = MemoryManager.to_prompt_section(memories)
 			if formatted:
 				memory_section = f"  <memories>\n{formatted}\n  </memories>\n"
+		dialog_section = f"  {dialog_context}\n" if dialog_context else ""
 		guidance = settings.memory_prompt_guidance or ""
 		guidance_block = f"  <guidance>{guidance}</guidance>\n" if guidance else ""
 		prompt = (
@@ -324,6 +402,7 @@ class RAGPipeline:
 			"  </constraints>\n"
 			f"{guidance_block}"
 			f"{memory_section}"
+			f"{dialog_section}"
 			f"  <question>{user_query}</question>\n"
 			f"  <context>{context}</context>\n"
 			"</prompt>"
@@ -349,12 +428,13 @@ class RAGPipeline:
 			data = resp.json()
 			return data["choices"][0]["message"]["content"].strip()
 
-	def _generate_with_openrouter_web(self, user_query: str, web_context: str, memories: List[str] | None = None) -> str:
+	def _generate_with_openrouter_web(self, user_query: str, web_context: str, memories: List[str] | None = None, dialog_context: str | None = None) -> str:
 		memory_section = ""
 		if memories:
 			formatted = MemoryManager.to_prompt_section(memories)
 			if formatted:
 				memory_section = f"  <memories>\n{formatted}\n  </memories>\n"
+		dialog_section = f"  {dialog_context}\n" if dialog_context else ""
 		guidance = settings.memory_prompt_guidance or ""
 		guidance_block = f"  <guidance>{guidance}</guidance>\n" if guidance else ""
 		prompt = (
@@ -373,6 +453,7 @@ class RAGPipeline:
 			"  </constraints>\n"
 			f"{guidance_block}"
 			f"{memory_section}"
+			f"{dialog_section}"
 			f"  <question>{user_query}</question>\n"
 			f"  <web_context>{web_context}</web_context>\n"
 			"</prompt>"
