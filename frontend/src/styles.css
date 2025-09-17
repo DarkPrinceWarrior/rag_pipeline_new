@@ -175,11 +175,6 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 .message.user .msg-toolbar { justify-content: flex-end; margin: 6px 6px 2px 0; }
 .msg-toolbar button { border: none; background: transparent; color: #374151; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; padding: 4px 6px; border-radius: 8px; }
 .msg-toolbar button:hover { background: #f3f4f6; }
-.msg-toolbar .edit { visibility: hidden; }
-.message.user:hover .msg-toolbar .edit,
-.message.user .bubble:hover + .msg-toolbar .edit,
-.message.user + .msg-toolbar:hover .edit { visibility: visible; }
-
 .inline-editor textarea {
   width: 100%; min-height: 68px; resize: vertical;
   background: #fff; color: var(--text);

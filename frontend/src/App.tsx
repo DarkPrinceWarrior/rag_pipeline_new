@@ -98,23 +98,6 @@ function useApiBase() {
   return ''
 }
 
-function CitationList({ citations }: { citations: Citation[] }) {
-  if (!citations?.length) return null
-  const bySerial = [...citations].sort((a, b) => a.serial - b.serial)
-  return (
-    <div className="citations">
-      <div className="muted small">Источники</div>
-      <ul>
-        {bySerial.map((c) => (
-          <li key={c.chunk_id}>
-            <span>S{c.serial} — {c.filename}, стр. {c.page}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  )
-}
-
 export default function App() {
   const initialDataRef = useRef(loadInitialData())
   const [chats, setChats] = useState<ChatSession[]>(initialDataRef.current.chats)
@@ -466,7 +449,6 @@ export default function App() {
                           >
                             {transformMath(m.content)}
                           </ReactMarkdown>
-                          <CitationList citations={m.citations ?? []} />
                         </>
                       ) : (
                         m.content
@@ -493,26 +475,12 @@ export default function App() {
                         <span>Скопировать</span>
                       </button>
                     )}
-                    {m.role === 'user' && editingIndex !== i && (
-                      <button
-                        type="button"
-                        className="msg-toolbar-btn edit"
-                        onClick={() => onEditMessage(i)}
-                        aria-label="Редактировать"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M12 20h9"></path>
-                          <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4Z"></path>
-                        </svg>
-                        <span>Редактировать</span>
-                      </button>
-                    )}
                   </div>
                 </div>
               ))}
               {loading && (
                 <div className="message system">
-                  <div className="bubble thinking">Думаю…</div>
+                  <div className="bubble thinking">Думаю</div>
                 </div>
               )}
               {error && (
