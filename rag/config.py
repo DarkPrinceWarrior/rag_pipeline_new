@@ -36,6 +36,20 @@ class Settings:
 	memory_category: str = os.getenv("MEMORY_CATEGORY", "general")
 	memory_site_url: str | None = os.getenv("MEMORY_SITE_URL")
 	memory_app_name: str | None = os.getenv("MEMORY_APP_NAME")
+	# Mem0 embedder & vector store настройки
+	memory_embedder_provider: str = os.getenv("MEMORY_EMBEDDER_PROVIDER", "huggingface")
+	memory_embedder_model_id: str = os.getenv("MEMORY_EMBEDDER_MODEL_ID", "sentence-transformers/all-MiniLM-L6-v2")
+	memory_vector_store_provider: str = os.getenv("MEMORY_VECTOR_STORE_PROVIDER", "faiss")
+	# Текстовое руководство для модели по использованию memories (на случай, если понадобится)
+	memory_prompt_guidance: str | None = os.getenv("MEMORY_PROMPT_GUIDANCE")
+	# Директория для локального индекса FAISS (используется Mem0 vector_store)
+	memory_faiss_path: str = os.getenv("MEMORY_FAISS_PATH", "./mem0_data/faiss")
+	# Размерность эмбеддингов для Mem0 vector_store (должна совпадать с эмбеддером)
+	memory_embedding_dims: int = int(os.getenv("MEMORY_EMBEDDING_DIMS", "384"))
+	# Параметры метрики для FAISS в Mem0: 'euclidean' | 'inner_product' | 'cosine'
+	memory_vector_distance_strategy: str = os.getenv("MEMORY_VECTOR_DISTANCE", "cosine")
+	# Нормализация L2 для косинусной близости
+	memory_vector_normalize_l2: bool = os.getenv("MEMORY_VECTOR_NORMALIZE_L2", "true").lower() in ("1", "true", "yes")
 
 
 

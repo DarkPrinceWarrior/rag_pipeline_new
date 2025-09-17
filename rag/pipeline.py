@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Tuple
 
 import httpx
+import re
 
 from .config import settings
 from .doc_ingest import ingest_pdf_to_chunks
@@ -144,7 +145,7 @@ class RAGPipeline:
 		context_tokens = len(enc2.encode(context)) if context else 0
 		return context, citations, best_score, context_tokens
 
-	def answer(self, query: str, top_k: int = 100) -> Dict:
+	def answer(self, query: str, top_k: int = 100, user_id: str | None = None) -> Dict:
 		start = time.time()
 		user_ref = user_id or settings.memory_default_user_id
 		memories = self.memory.fetch(query, user_ref)
@@ -216,7 +217,7 @@ class RAGPipeline:
 				"context_tokens": int(context_tokens),
 				"used_memories": len(memories),
 			}
-			fallback_answer = "??? ?? ?????? ? ???????."
+			fallback_answer = "У меня недостаточно информации в руководстве, чтобы ответить."
 			self.memory.store_exchange(
 				query,
 				fallback_answer,
@@ -304,13 +305,15 @@ class RAGPipeline:
 			formatted = MemoryManager.to_prompt_section(memories)
 			if formatted:
 				memory_section = f"  <memories>\n{formatted}\n  </memories>\n"
+		guidance = settings.memory_prompt_guidance or ""
+		guidance_block = f"  <guidance>{guidance}</guidance>\n" if guidance else ""
 		prompt = (
 			"<prompt>\n"
 			"  <persona>\n"
 			"    Ты — ведущий инженер-аналитик в нефтегазовой отрасли.\n"
 			"  </persona>\n"
 			"  <task>\n"
-			"    Ты — точный ассистент Retrieval‑Augmented Generation. Используй ТОЛЬКО раздел <context>.\n"
+			"    Ты — точный ассистент Retrieval‑Augmented Generation. Основывайся на разделе <context>.\n"
 			"    Если ответа нет в контексте, явно скажи: \"У меня недостаточно информации в руководстве, чтобы ответить.\"\n"
 			"  </task>\n"
 			"  <constraints>\n"
@@ -319,6 +322,7 @@ class RAGPipeline:
 			"    - Формулы: LaTeX (inline $...$, block $$...$$), без кастомных обёрток.\n"
 			"    - Ответ только на русском языке.\n"
 			"  </constraints>\n"
+			f"{guidance_block}"
 			f"{memory_section}"
 			f"  <question>{user_query}</question>\n"
 			f"  <context>{context}</context>\n"
@@ -351,13 +355,15 @@ class RAGPipeline:
 			formatted = MemoryManager.to_prompt_section(memories)
 			if formatted:
 				memory_section = f"  <memories>\n{formatted}\n  </memories>\n"
+		guidance = settings.memory_prompt_guidance or ""
+		guidance_block = f"  <guidance>{guidance}</guidance>\n" if guidance else ""
 		prompt = (
 			"<prompt>\n"
 			"  <persona>\n"
 			"    Ты — ведущий инженер-аналитик в нефтегазовой отрасли.\n"
 			"  </persona>\n"
 			"  <task>\n"
-			"    PDF‑мануал не содержит ответа. Используй ТОЛЬКО раздел <web_context>.\n"
+			"    PDF‑мануал не содержит ответа. Используй раздел <web_context>.\n"
 			"  </task>\n"
 			"  <constraints>\n"
 			"    - Начни с краткого ответа, затем ключевые шаги/факты пунктами.\n"
@@ -365,6 +371,7 @@ class RAGPipeline:
 			"    - Формулы: LaTeX (inline $...$, block $$...$$), без кастомных обёрток.\n"
 			"    - Ответ только на русском языке.\n"
 			"  </constraints>\n"
+			f"{guidance_block}"
 			f"{memory_section}"
 			f"  <question>{user_query}</question>\n"
 			f"  <web_context>{web_context}</web_context>\n"
