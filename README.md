@@ -44,7 +44,7 @@ python scripts/ingest_path.py <path-to-file-or-dir>
 
 5) Run the API (serves Web UI)
 ```bat
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+uvicorn app.main:app --port 8000
 ```
 
 6) Open Web UI

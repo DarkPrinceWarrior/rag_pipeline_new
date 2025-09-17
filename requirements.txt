@@ -17,3 +17,4 @@ orjson==3.10.7
 docling
 numpy>=1.26.0
 tavily-python
+mem0ai

@@ -27,6 +27,18 @@ class Settings:
 	llm_model_id: str = os.getenv("LLM_MODEL_ID", "qwen/qwen3-30b-a3b-instruct-2507")
 	openrouter_endpoint: str = os.getenv("OPENROUTER_ENDPOINT", "https://openrouter.ai/api/v1/chat/completions")
 
+	memory_enabled: bool = os.getenv("MEMORY_ENABLED", "true").lower() in ("1", "true", "yes")
+	memory_model_id: str = os.getenv("MEMORY_MODEL_ID", "qwen/qwen3-30b-a3b-instruct-2507")
+	memory_temperature: float = float(os.getenv("MEMORY_TEMPERATURE", "0.2"))
+	memory_max_tokens: int = int(os.getenv("MEMORY_MAX_TOKENS", "2000"))
+	memory_search_limit: int = int(os.getenv("MEMORY_SEARCH_LIMIT", "3"))
+	memory_default_user_id: str = os.getenv("MEMORY_DEFAULT_USER_ID", "alma")
+	memory_category: str = os.getenv("MEMORY_CATEGORY", "general")
+	memory_site_url: str | None = os.getenv("MEMORY_SITE_URL")
+	memory_app_name: str | None = os.getenv("MEMORY_APP_NAME")
+
+
+
 	device: str = os.getenv("DEVICE", "cuda")
 	batch_size_embed: int = int(os.getenv("BATCH_SIZE_EMBED", "64"))
 	batch_size_rerank: int = int(os.getenv("BATCH_SIZE_RERANK", "16"))

@@ -9,6 +9,7 @@ import httpx
 
 from .config import settings
 from .doc_ingest import ingest_pdf_to_chunks
+from .memory import MemoryManager
 from .embedding import EmbeddingModel
 from .reranker import Reranker
 from .store import LanceDBStore, LanceRecord
@@ -31,6 +32,7 @@ class RAGPipeline:
 		self.store = LanceDBStore()
 		self.embedder = EmbeddingModel()
 		self.reranker = Reranker()
+		self.memory = MemoryManager()
 
 	def ingest_pdf(self, pdf_path: str) -> int:
 		chunks = ingest_pdf_to_chunks(pdf_path)
@@ -144,6 +146,8 @@ class RAGPipeline:
 
 	def answer(self, query: str, top_k: int = 100) -> Dict:
 		start = time.time()
+		user_ref = user_id or settings.memory_default_user_id
+		memories = self.memory.fetch(query, user_ref)
 		qv = self.embedder.embed_query(query)
 		candidates = self.store.hybrid_search(query, qv, top_k=top_k, weights=(0.8, 0.2))
 		context, citations, best_score, context_tokens = self._assemble_context(query, candidates, max_context_tokens=3500)
@@ -161,13 +165,13 @@ class RAGPipeline:
 				max_tokens=settings.web_context_max_tokens,
 			)
 			if web_ctx:
-				generated = self._generate_with_openrouter_web(query, web_ctx)
+				generated = self._generate_with_openrouter_web(query, web_ctx, memories=memories)
 				answer = generated
 				citations = []
 			else:
-				answer = self._generate_with_openrouter(query, context)
+				answer = self._generate_with_openrouter(query, context, memories=memories)
 		else:
-			answer = self._generate_with_openrouter(query, context)
+			answer = self._generate_with_openrouter(query, context, memories=memories)
 		latency_ms = int((time.time() - start) * 1000)
 		return {
 			"answer": answer,
@@ -194,8 +198,10 @@ class RAGPipeline:
 		except Exception:
 			return False
 
-	def answer_internal(self, query: str, top_k: int = 5) -> Dict:
+	def answer_internal(self, query: str, top_k: int = 5, user_id: str | None = None) -> Dict:
 		start = time.time()
+		user_ref = user_id or settings.memory_default_user_id
+		memories = self.memory.fetch(query, user_ref)
 		qv = self.embedder.embed_query(query)
 		candidates = self.store.hybrid_search(query, qv, top_k=top_k, weights=(0.8, 0.2))
 		context, citations, best_score, context_tokens = self._assemble_context(query, candidates, max_context_tokens=3500)
@@ -208,14 +214,22 @@ class RAGPipeline:
 				"num_candidates": len(candidates),
 				"best_score": float(best_score) if isinstance(best_score, (int, float)) else 0.0,
 				"context_tokens": int(context_tokens),
+				"used_memories": len(memories),
 			}
+			fallback_answer = "??? ?? ?????? ? ???????."
+			self.memory.store_exchange(
+				query,
+				fallback_answer,
+				user_ref,
+				metadata={"mode": "internal", "reason": "insufficient_context"},
+			)
 			return {
-				"answer": "Ответ не найден в документах.",
+				"answer": fallback_answer,
 				"citations": [],
 				"latency_ms": latency_ms,
 				"_telemetry": telemetry,
 			}
-		answer = self._generate_with_openrouter(query, context)
+		answer = self._generate_with_openrouter(query, context, memories=memories)
 		latency_ms = int((time.time() - start) * 1000)
 		telemetry = {
 			"selected_mode": "internal",
@@ -225,7 +239,9 @@ class RAGPipeline:
 			"best_score": float(best_score) if isinstance(best_score, (int, float)) else 0.0,
 			"context_tokens": int(context_tokens),
 			"num_citations": len(citations),
+			"used_memories": len(memories),
 		}
+		self.memory.store_exchange(query, answer, user_ref, metadata={"mode": "internal"})
 		return {
 			"answer": answer,
 			"citations": [c.__dict__ for c in citations],
@@ -233,8 +249,10 @@ class RAGPipeline:
 			"_telemetry": telemetry,
 		}
 
-	def answer_web(self, query: str) -> Dict:
+	def answer_web(self, query: str, user_id: str | None = None) -> Dict:
 		start = time.time()
+		user_ref = user_id or settings.memory_default_user_id
+		memories = self.memory.fetch(query, user_ref)
 		web_ctx, web_results = build_web_context(
 			query,
 			max_results=settings.web_search_max_results,
@@ -247,14 +265,22 @@ class RAGPipeline:
 				"selected_mode": "web",
 				"query": query,
 				"num_web_results": len(web_results),
+				"used_memories": len(memories),
 			}
+			fallback_answer = "??? ?? ?????? ? ?????."
+			self.memory.store_exchange(
+				query,
+				fallback_answer,
+				user_ref,
+				metadata={"mode": "web", "reason": "no_web_results"},
+			)
 			return {
-				"answer": "Ответ не найден в интернете.",
+				"answer": fallback_answer,
 				"citations": [],
 				"latency_ms": latency_ms,
 				"_telemetry": telemetry,
 			}
-		generated = self._generate_with_openrouter_web(query, web_ctx)
+		generated = self._generate_with_openrouter_web(query, web_ctx, memories=memories)
 		answer = generated
 		latency_ms = int((time.time() - start) * 1000)
 		telemetry = {
@@ -262,7 +288,9 @@ class RAGPipeline:
 			"query": query,
 			"num_web_results": len(web_results),
 			"web_result_urls": [r.url for r in web_results],
+			"used_memories": len(memories),
 		}
+		self.memory.store_exchange(query, answer, user_ref, metadata={"mode": "web"})
 		return {
 			"answer": answer,
 			"citations": [],
@@ -270,7 +298,12 @@ class RAGPipeline:
 			"_telemetry": telemetry,
 		}
 
-	def _generate_with_openrouter(self, user_query: str, context: str) -> str:
+	def _generate_with_openrouter(self, user_query: str, context: str, memories: List[str] | None = None) -> str:
+		memory_section = ""
+		if memories:
+			formatted = MemoryManager.to_prompt_section(memories)
+			if formatted:
+				memory_section = f"  <memories>\n{formatted}\n  </memories>\n"
 		prompt = (
 			"<prompt>\n"
 			"  <persona>\n"
@@ -286,6 +319,7 @@ class RAGPipeline:
 			"    - Формулы: LaTeX (inline $...$, block $$...$$), без кастомных обёрток.\n"
 			"    - Ответ только на русском языке.\n"
 			"  </constraints>\n"
+			f"{memory_section}"
 			f"  <question>{user_query}</question>\n"
 			f"  <context>{context}</context>\n"
 			"</prompt>"
@@ -311,7 +345,12 @@ class RAGPipeline:
 			data = resp.json()
 			return data["choices"][0]["message"]["content"].strip()
 
-	def _generate_with_openrouter_web(self, user_query: str, web_context: str) -> str:
+	def _generate_with_openrouter_web(self, user_query: str, web_context: str, memories: List[str] | None = None) -> str:
+		memory_section = ""
+		if memories:
+			formatted = MemoryManager.to_prompt_section(memories)
+			if formatted:
+				memory_section = f"  <memories>\n{formatted}\n  </memories>\n"
 		prompt = (
 			"<prompt>\n"
 			"  <persona>\n"
@@ -326,6 +365,7 @@ class RAGPipeline:
 			"    - Формулы: LaTeX (inline $...$, block $$...$$), без кастомных обёрток.\n"
 			"    - Ответ только на русском языке.\n"
 			"  </constraints>\n"
+			f"{memory_section}"
 			f"  <question>{user_query}</question>\n"
 			f"  <web_context>{web_context}</web_context>\n"
 			"</prompt>"

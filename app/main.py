@@ -30,6 +30,7 @@ pipeline = RAGPipeline()
 
 class AskRequest(BaseModel):
 	query: str
+	user_id: Optional[str] = None
 	top_k: Optional[int] = None
 	web_search: Optional[bool] = False
 
@@ -45,12 +46,13 @@ async def ask(req: AskRequest) -> AskResponse:
 	# Docs-first: try internal docs. Only if insufficient and web_search is enabled -> web.
 	# Clamp top_k to at least 1, fallback to settings.default_top_k
 	tk = int(req.top_k) if (req.top_k and req.top_k >= 1) else int(getattr(settings, "default_top_k", 200))
-	res = pipeline.answer_internal(req.query, top_k=tk)
+	user_id = req.user_id or settings.memory_default_user_id
+	res = pipeline.answer_internal(req.query, top_k=tk, user_id=user_id)
 	try:
 		ans_text = (res.get("answer") or "").strip()
 		insufficient = pipeline.is_insufficient_answer(ans_text)
 		if insufficient and req.web_search:
-			res = pipeline.answer_web(req.query)
+			res = pipeline.answer_web(req.query, user_id=user_id)
 	except Exception:
 		pass
 	# Developer telemetry (not returned to client)
