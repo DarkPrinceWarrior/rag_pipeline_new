@@ -205,6 +205,24 @@ export default function App() {
     setCurrentChatId(next.id)
   }
 
+  function onDeleteChat(id: string) {
+    setChats((prev) => {
+      const index = prev.findIndex((chat) => chat.id === id)
+      if (index === -1) return prev
+      const nextChats = prev.filter((chat) => chat.id !== id)
+      if (nextChats.length === 0) {
+        const fallback = createEmptyChat()
+        setCurrentChatId(fallback.id)
+        return [fallback]
+      }
+      if (currentChatId === id) {
+        const nextIndex = index < nextChats.length ? index : nextChats.length - 1
+        setCurrentChatId(nextChats[nextIndex].id)
+      }
+      return nextChats
+    })
+  }
+
   function onEditMessage(index: number) {
     if (!messages[index] || messages[index].role !== 'user') return
     const el = bubbleRefs.current[index]
@@ -390,17 +408,46 @@ export default function App() {
     <div className="page">
       <div className="chat-tabs" role="navigation" aria-label="История чатов">
         <div className="chat-tabs-list">
-          {chats.map((chat) => (
-            <button
-              key={chat.id}
-              type="button"
-              className={`chat-tab${chat.id === currentChatId ? ' active' : ''}`}
-              onClick={() => onSelectChat(chat.id)}
-              title={chat.title}
-            >
-              {chat.title}
-            </button>
-          ))}
+          {chats.map((chat) => {
+            const isActive = chat.id === currentChatId
+            return (
+              <div key={chat.id} className={`chat-tab${isActive ? ' active' : ''}`} role="group">
+                <button
+                  type="button"
+                  className="chat-tab-button"
+                  onClick={() => onSelectChat(chat.id)}
+                  title={chat.title}
+                >
+                  {chat.title}
+                </button>
+                <button
+                  type="button"
+                  className="chat-tab-delete"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onDeleteChat(chat.id)
+                  }}
+                  aria-label="Удалить чат"
+                  title="Удалить чат"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                </button>
+              </div>
+            )
+          })}
         </div>
         <button type="button" className="chat-tab new" onClick={onCreateChat}>
           + Новый чат

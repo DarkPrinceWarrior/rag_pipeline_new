@@ -298,6 +298,9 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 }
 
 .chat-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 40;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -316,19 +319,20 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 }
 
 .chat-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   background: #f8fafc;
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 10px 16px;
+  padding: 8px 10px 8px 14px;
   font-size: 14px;
   line-height: 1.2;
   cursor: pointer;
-  max-width: 220px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  max-width: 240px;
   transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+  flex-shrink: 0;
 }
 
 .chat-tab:hover {
@@ -341,6 +345,77 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
   border-color: var(--primary);
   color: #fff;
 }
+
+.chat-tab:focus-within {
+  border-color: #d0d7e2;
+  box-shadow: 0 0 0 2px rgba(47,129,247,0.15);
+}
+
+.chat-tab-button {
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-tab-button:focus {
+  outline: none;
+}
+
+.chat-tab-button:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.chat-tab-delete {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  padding: 0;
+  opacity: 0;
+  transition: opacity .15s ease, background-color .15s ease, color .15s ease;
+  flex-shrink: 0;
+}
+
+.chat-tab:hover .chat-tab-delete,
+.chat-tab:focus-within .chat-tab-delete {
+  opacity: 1;
+}
+
+.chat-tab-delete:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(47,129,247,0.2);
+}
+
+.chat-tab-delete:hover {
+  background: rgba(15,23,42,0.08);
+}
+
+.chat-tab.active .chat-tab-delete:hover {
+  background: rgba(255,255,255,0.2);
+}
+
+.chat-tab-delete svg {
+  pointer-events: none;
+}
+
 
 .chat-tab.new {
   background: transparent;
@@ -367,6 +442,6 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
   }
   .chat-tab {
     font-size: 13px;
-    padding: 8px 12px;
+    padding: 6px 8px 6px 12px;
   }
 }
