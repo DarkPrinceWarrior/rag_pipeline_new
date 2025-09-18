@@ -170,13 +170,13 @@ body {
 }
 
 .message.user .bubble {
-  background: var(--gradient-primary);
-  border: 1px solid var(--primary);
-  color: var(--white);
+  background: var(--glass-panel);
+  border: 1px solid var(--border);
+  color: var(--text);
   box-shadow:
-    0 8px 32px rgba(52, 152, 219, 0.3),
-    0 4px 16px rgba(0,0,0,0.15),
-    inset 0 1px 0 rgba(255,255,255,0.2);
+    0 8px 32px var(--shadow-light),
+    0 4px 16px var(--shadow-light),
+    inset 0 1px 0 rgba(255,255,255,0.1);
   overflow: hidden;
   padding-bottom: 24px;
   z-index: 1;
@@ -260,7 +260,7 @@ body {
   max-height: 280px;
   line-height: 1.5;
   font-weight: 400;
-  overflow: hidden;
+  overflow-y: auto;
   resize: none;
 }
 .composer-row textarea:focus { outline: none; }
@@ -303,7 +303,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow
 .msg-action-btn:hover { background: var(--primary-light); color: var(--primary); }
 
 .msg-toolbar { display: flex; gap: 12px; align-items: center; margin: 8px 0 4px 8px; }
-.message.user .msg-toolbar { justify-content: flex-end; margin: 8px 8px 4px 0; }
+.msg-item.user .msg-toolbar { justify-content: flex-end; margin: 8px 8px 4px 0; }
 .msg-toolbar button {
   border: 1px solid var(--border);
   background: var(--glass-panel);
@@ -327,6 +327,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow
 .inline-editor textarea {
   width: 100%;
   min-height: 68px;
+  max-height: 300px;
   background: var(--surface);
   color: var(--text);
   border: 2px solid var(--border);
@@ -335,7 +336,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow
   font-size: 15px;
   line-height: 1.5;
   transition: all 0.3s ease;
-  overflow: hidden;
+  overflow-y: auto;
   resize: none;
 }
 .inline-editor textarea:focus {
@@ -374,31 +375,6 @@ button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow
   resize: none;
 }
 
-/* Кнопка редактирования (плашка) */
-.edit-pill {
-  position: absolute;
-  right: 8px;
-  bottom: -16px;
-  border: 1px solid var(--border);
-  background: var(--glass-panel);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  color: var(--text-secondary);
-  display: inline-flex; align-items: center; gap: 6px;
-  cursor: pointer; padding: 8px 12px;
-  border-radius: 12px; font-size: 13px; font-weight: 500;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 2px 8px var(--shadow-light);
-  opacity: 0; pointer-events: none; z-index: 5;
-}
-.message.user .bubble:hover .edit-pill { opacity: 1; pointer-events: auto; }
-.edit-pill:hover {
-  background: var(--primary-light);
-  color: var(--primary);
-  border-color: var(--primary);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(52, 152, 219, 0.2);
-}
 
 /* Переключатель (switch) */
 .switch { position: relative; display: inline-flex; width: 52px; height: 28px; }
