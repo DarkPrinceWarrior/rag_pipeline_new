@@ -4,7 +4,6 @@ import re
 from dataclasses import dataclass
 from typing import List, Optional
 
-import httpx
 from tavily import TavilyClient
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 
@@ -67,7 +66,7 @@ def web_search(query: str, max_results: int = 5, timeout: float = 10.0) -> List[
             query=prefixed_query,
             search_depth=settings.web_search_depth,
             max_results=max_results,
-            include_raw_content=settings.web_search_include_raw_content,
+            include_raw_content="markdown",
             chunks_per_source=settings.web_search_chunks_per_source,
         )
         items = resp.get("results", []) if isinstance(resp, dict) else []
@@ -81,46 +80,30 @@ def web_search(query: str, max_results: int = 5, timeout: float = 10.0) -> List[
             if norm_url in seen:
                 continue
             seen.add(norm_url)
-            # Tavily returns page content snippet in `content`
+            # Tavily: краткий фрагмент в `content`, полнотекст в `raw_content`
             snippet = (r.get("content") or r.get("snippet") or "").strip()
+            raw = (r.get("raw_content") or "").strip()
             if filter_enabled and tokens:
                 hay = f"{title} {snippet} {norm_url}".lower()
                 num_hits = sum(1 for t in tokens if t in hay)
                 if num_hits < settings.web_search_required_token_matches:
                     continue
-            results.append(WebResult(title=_clean_text(title), url=norm_url, snippet=_clean_text(snippet)))
+            results.append(
+                WebResult(
+                    title=_clean_text(title),
+                    url=norm_url,
+                    snippet=_clean_text(snippet),
+                    content=_clean_text(raw) if raw else None,
+                )
+            )
     except Exception:
         return results
     return results
 
 
 def fetch_page_text(url: str, timeout: float = 10.0, max_chars: int = 4000) -> Optional[str]:
-    headers = {
-        "User-Agent": settings.web_user_agent,
-    }
-    try:
-        t = settings.web_http_timeout_seconds if timeout is None else timeout
-        m = settings.web_fetch_max_chars if max_chars is None else max_chars
-        with httpx.Client(timeout=httpx.Timeout(t), verify=settings.web_http_verify_tls) as client:
-            resp = client.get(url, headers=headers, follow_redirects=True)
-            resp.raise_for_status()
-            html = resp.text
-    except Exception:
-        return None
-
-    # Very lightweight HTML-to-text using regex fallbacks to avoid heavy deps
-    try:
-        # Remove scripts/styles
-        html = re.sub(r"<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>", " ", html, flags=re.IGNORECASE)
-        html = re.sub(r"<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>", " ", html, flags=re.IGNORECASE)
-        # Strip tags
-        text = re.sub(r"<[^>]+>", " ", html)
-        text = _clean_text(text)
-        if len(text) > m:
-            text = text[:m]
-        return text
-    except Exception:
-        return None
+    # Удалено: повторная загрузка страниц через httpx не требуется, содержимое приходит от Tavily
+    return None
 
 
 def build_web_context(query: str, max_results: int = 5, fetch_top_n: int = 3, max_tokens: int = 3200) -> tuple[str, List[WebResult]]:
@@ -128,29 +111,36 @@ def build_web_context(query: str, max_results: int = 5, fetch_top_n: int = 3, ma
     if not results:
         return "", []
 
-    # Fetch a few pages for richer context
-    for i, r in enumerate(results[: max(0, fetch_top_n) ]):
-        content = fetch_page_text(r.url)
-        if content:
-            results[i].content = content
+    # Сбор контекста по реальному токенному бюджету без повторной загрузки страниц
+    from .utils import get_tokenizer, sliding_token_windows
 
-    # Assemble context with headers, keeping a token-like budget by length heuristic
+    enc = get_tokenizer()
+    budget = max_tokens
     parts: List[str] = []
-    budget = max_tokens * 3  # rough heuristic: char budget ~ 3x tokens
     serial = 0
     for r in results:
-        serial += 1
-        header = f"W#{serial} — {r.title or r.url} ({r.url})\n"
-        body = r.content or r.snippet
-        if not body:
-            continue
-        segment = header + body
-        if len(segment) > budget:
-            segment = segment[:budget]
-        parts.append(segment)
-        budget -= len(segment)
         if budget <= 0:
             break
+        serial += 1
+        header = f"W#{serial} — {r.title or r.url} ({r.url})\n"
+        body = r.content or r.snippet or ""
+        if not body:
+            continue
+        header_tokens = len(enc.encode(header))
+        body_tokens = len(enc.encode(body))
+        seg_tokens = header_tokens + body_tokens
+        if seg_tokens > budget:
+            max_body_tokens = max(0, budget - header_tokens)
+            if max_body_tokens > 0:
+                body = sliding_token_windows(body, max_body_tokens, 0, enc=enc)[0][2]
+            else:
+                body = ""
+        segment = header + body
+        used_tokens = len(enc.encode(segment))
+        if used_tokens == 0:
+            continue
+        parts.append(segment)
+        budget -= used_tokens
 
     context = "\n\n".join(parts)
     return context, results

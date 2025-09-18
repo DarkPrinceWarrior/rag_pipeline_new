@@ -140,7 +140,7 @@ class LanceDBStore:
 		"""Вычислить BM25-оценки только для переданных кандидатов.
 
 		Исключает чтение всей таблицы и ускоряет работу при больших базах.
-		Возвращает словарь id -> нормализованный скор [0..1].
+		Возвращает словарь id -> сырая оценка BM25 (без нормализации).
 		"""
 		if not _HAS_BM25S or not candidates:
 			return {}
@@ -212,11 +212,8 @@ class LanceDBStore:
 				scores_list = [0.0] * len(ids)
 		else:
 			scores_list = [0.0] * len(ids)
-		# Мин-макс нормализация
-		max_s = float(np.max(scores_list)) if scores_list else 1.0
-		if max_s == 0:
-			return {ids[i]: 0.0 for i in range(len(ids))}
-		return {ids[i]: float(scores_list[i] / max_s) for i in range(len(ids))}
+		# Возвращаем сырые значения BM25; нормализация выполняется на этапе гибридного склеивания
+		return {ids[i]: float(scores_list[i]) for i in range(len(ids))}
 
 	def vector_search(self, query_vector: List[float], top_k: int) -> List[Dict]:
 		if self.table is None:
@@ -252,31 +249,81 @@ class LanceDBStore:
 		return float(np.dot(query, vec) / (np.linalg.norm(query) * np.linalg.norm(vec) + 1e-12))
 
 	def hybrid_search(self, query: str, query_vector: List[float], top_k: int, weights: Tuple[float, float] = (0.8, 0.2)) -> List[Tuple[Dict, float]]:
+		"""Гибридный поиск: используем готовые score из LanceDB и BM25.
+
+		- Для векторной части используем поле score из LanceDB (.metric("cosine")),
+		  где меньшие значения лучше (distance). Конвертируем в 
+		  «больше — лучше» через отрицание и нормализуем робастно.
+		- Для BM25 используем сырые баллы и нормализуем робастно.
+		- Смешивание линейное по весам (alpha для векторов, beta для BM25).
+		"""
 		vector_hits = self.vector_search(query_vector, top_k=top_k)
 		if not vector_hits:
 			return []
-		bm25_scores = self._bm25_scores(query, candidates=vector_hits)
+		bm25_scores_raw = self._bm25_scores(query, candidates=vector_hits)
+
+		# Собираем сырые векторные баллы: предпочитаем score из LanceDB; фолбэк — ручной косинус
+		ids: List[str] = []
+		raw_vec: List[float] = []
 		q = np.array(query_vector, dtype=np.float32)
-		vec_scores: Dict[str, float] = {}
 		for h in vector_hits:
-			vec = h.get("vector")
-			if vec is None:
+			vid = h.get("id")
+			if vid is None:
 				continue
-			v = np.array(vec, dtype=np.float32)
-			vec_scores[h["id"]] = self._cosine_sim(q, v)
-		if vec_scores:
-			min_vs = min(vec_scores.values())
-			max_vs = max(vec_scores.values())
-			range_vs = (max_vs - min_vs) or 1.0
-			vec_scores = {k: (v - min_vs) / range_vs for k, v in vec_scores.items()}
+			ids.append(str(vid))
+			if "score" in h and h["score"] is not None:
+				# В LanceDB для cosine метрики score — это distance (меньше — лучше)
+				try:
+					raw_val = -float(h["score"])  # инвертируем знак, чтобы больше было лучше
+				except Exception:
+					raw_val = 0.0
+				raw_vec.append(raw_val)
+			else:
+				# Фолбэк на случай старого драйвера без score
+				vec = h.get("vector")
+				if vec is None:
+					raw_vec.append(0.0)
+				else:
+					v = np.array(vec, dtype=np.float32)
+					raw_vec.append(self._cosine_sim(q, v))
+
+		# Строим массив сырых BM25 по тем же id
+		raw_bm25: List[float] = [float(bm25_scores_raw.get(i, 0.0)) for i in ids]
+
+		def _robust_scale(values: List[float]) -> List[float]:
+			"""Робастная нормализация: (x - median) / (1.4826 * MAD).
+
+			При вырожденности MAD — фолбэк на z-score; при нуле и там, и там — возвращаем нули.
+			"""
+			if not values:
+				return []
+			arr = np.array(values, dtype=np.float64)
+			med = float(np.median(arr))
+			mad = float(np.median(np.abs(arr - med)))
+			den = 1.4826 * mad
+			if den > 0:
+				return [float((x - med) / den) for x in arr]
+			# Фолбэк: z-score
+			mu = float(np.mean(arr))
+			sigma = float(np.std(arr))
+			if sigma > 0:
+				return [float((x - mu) / sigma) for x in arr]
+			return [0.0 for _ in arr]
+
+		vec_scaled = _robust_scale(raw_vec)
+		bm25_scaled = _robust_scale(raw_bm25)
+		vec_scores = {ids[i]: vec_scaled[i] if i < len(vec_scaled) else 0.0 for i in range(len(ids))}
+		bm25_scores = {ids[i]: bm25_scaled[i] if i < len(bm25_scaled) else 0.0 for i in range(len(ids))}
+
 		alpha, beta = weights
 		combined: List[Tuple[Dict, float]] = []
 		for h in vector_hits:
 			vid = h.get("id")
 			if vid is None:
 				continue
-			vs = vec_scores.get(vid, 0.0)
-			bs = bm25_scores.get(vid, 0.0)
+			vid_str = str(vid)
+			vs = float(vec_scores.get(vid_str, 0.0))
+			bs = float(bm25_scores.get(vid_str, 0.0))
 			s = alpha * vs + beta * bs
 			combined.append((h, s))
 		combined.sort(key=lambda x: x[1], reverse=True)
