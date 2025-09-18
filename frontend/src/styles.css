@@ -107,6 +107,48 @@ body {
   80%, 100% { content: '...'; }
 }
 
+.bubble.has-source {
+  position: relative;
+  padding-top: 52px;
+}
+
+.source-chip {
+  position: absolute;
+  top: 16px; left: 20px;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  background: rgba(15,23,42,0.05);
+  color: var(--muted);
+  pointer-events: none;
+  line-height: 1;
+}
+
+.source-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: currentColor;
+}
+
+.source-chip.source-internal {
+  background: #eef2ff;
+  color: #1d4ed8;
+}
+
+.source-chip.source-internal .source-dot {
+  background: #2563eb;
+}
+
+.source-chip.source-web {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.source-chip.source-web .source-dot {
+  background: #10b981;
+}
+
+
 .prose :is(p, ul, ol) { margin: 10px 0; }
 .prose pre, .prose code { white-space: pre-wrap; word-wrap: break-word; }
 .prose ul { padding-left: 20px; }

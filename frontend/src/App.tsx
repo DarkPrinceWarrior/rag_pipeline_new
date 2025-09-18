@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import 'katex/dist/katex.min.css'
-import type { AskRequest, AskResponse, Citation } from './types'
+import type { AnswerSource, AskRequest, AskResponse, Citation } from './types'
 
 function useAutosize(ref: React.RefObject<HTMLTextAreaElement>, value: string) {
   useEffect(() => {
@@ -20,8 +20,13 @@ const CURRENT_CHAT_KEY = 'rag_current_chat_id'
 const DEFAULT_CHAT_TITLE = 'Новый чат'
 const MAX_TITLE_LENGTH = 60
 
-type ChatMessage = { role: 'user' | 'assistant' | 'system'; content: string; citations?: Citation[] }
+type ChatMessage = { role: 'user' | 'assistant' | 'system'; content: string; citations?: Citation[]; source?: AnswerSource }
 type ChatSession = { id: string; title: string; messages: ChatMessage[]; createdAt: number; updatedAt: number }
+
+const SOURCE_META: Record<AnswerSource, { label: string; description: string }> = {
+  internal: { label: 'Docs', description: 'Answer generated from internal knowledge base' },
+  web: { label: 'Web', description: 'Answer includes context from web search' }
+}
 
 function transformMath(content: string): string {
   let out = content.replace(/:\s*\[(\s*[\s\S]*?\s*)\]/g, (_m, g1) => `$$\n${g1}\n$$`)
@@ -54,8 +59,13 @@ function normalizeMessage(value: unknown): ChatMessage | null {
   if (maybe.role !== 'user' && maybe.role !== 'assistant' && maybe.role !== 'system') return null
   if (typeof maybe.content !== 'string') return null
   const msg: ChatMessage = { role: maybe.role, content: maybe.content }
-  if (maybe.role === 'assistant' && Array.isArray(maybe.citations)) {
-    msg.citations = maybe.citations.filter((c): c is Citation => !!c && typeof (c as Citation).chunk_id === 'string')
+  if (maybe.role === 'assistant') {
+    if (Array.isArray(maybe.citations)) {
+      msg.citations = maybe.citations.filter((c): c is Citation => !!c && typeof (c as Citation).chunk_id === 'string')
+    }
+    if (maybe.source === 'internal' || maybe.source === 'web') {
+      msg.source = maybe.source
+    }
   }
   return msg
 }
@@ -246,7 +256,7 @@ export default function App() {
           const now = Date.now()
           return {
             ...chat,
-            messages: [...chat.messages, { role: 'assistant', content: json.answer, citations: json.citations }],
+            messages: [...chat.messages, { role: 'assistant', content: json.answer, citations: json.citations, source: json.source }],
             updatedAt: now
           }
         })
@@ -295,7 +305,7 @@ export default function App() {
           const now = Date.now()
           return {
             ...chat,
-            messages: [...chat.messages, { role: 'assistant', content: json.answer, citations: json.citations }],
+            messages: [...chat.messages, { role: 'assistant', content: json.answer, citations: json.citations, source: json.source }],
             updatedAt: now
           }
         })
@@ -410,7 +420,7 @@ export default function App() {
                 <div className={`msg-item ${m.role}`} key={i}>
                   <div className={`message ${m.role}`}>
                     <div
-                      className={`bubble ${m.role === 'assistant' ? 'prose' : ''} ${m.role === 'user' ? 'uncopyable' : ''}`}
+                      className={`bubble ${m.role === 'assistant' ? 'prose' : ''} ${m.role === 'user' ? 'uncopyable' : ''} ${m.source ? 'has-source' : ''}`}
                       ref={m.role === 'user' ? (el) => { bubbleRefs.current[i] = el } : undefined}
                       onCopy={m.role === 'user' ? (ev) => ev.preventDefault() : undefined}
                       onCut={m.role === 'user' ? (ev) => ev.preventDefault() : undefined}
@@ -442,6 +452,17 @@ export default function App() {
                         </div>
                       ) : m.role === 'assistant' ? (
                         <>
+                          {m.source && (
+                            <div
+                              className={`source-chip source-${m.source}`}
+                              role="note"
+                              aria-label={SOURCE_META[m.source].description}
+                              title={SOURCE_META[m.source].description}
+                            >
+                              <span className="source-dot" aria-hidden="true"></span>
+                              <span>{SOURCE_META[m.source].label}</span>
+                            </div>
+                          )}
                           <ReactMarkdown
                             className="prose"
                             remarkPlugins={[remarkGfm, remarkMath]}

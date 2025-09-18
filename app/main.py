@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Literal, Optional
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -40,6 +40,7 @@ class AskResponse(BaseModel):
 	answer: str
 	citations: list
 	latency_ms: int
+	source: Literal['internal', 'web']
 
 
 @app.post("/ask", response_model=AskResponse)

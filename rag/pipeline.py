@@ -272,6 +272,7 @@ class RAGPipeline:
 					"answer": answer_dialog,
 					"citations": [],
 					"latency_ms": latency_ms,
+					"source": "internal",
 					"_telemetry": telemetry,
 				}
 			# Иначе — честный fallback
@@ -288,6 +289,7 @@ class RAGPipeline:
 				"answer": fallback_answer,
 				"citations": [],
 				"latency_ms": latency_ms,
+				"source": "internal",
 				"_telemetry": telemetry,
 			}
 		answer = self._generate_with_openrouter(query, context, memories=memories, dialog_context=dialog_context)
@@ -314,6 +316,7 @@ class RAGPipeline:
 			"answer": answer,
 			"citations": [c.__dict__ for c in citations],
 			"latency_ms": latency_ms,
+			"source": "internal",
 			"_telemetry": telemetry,
 		}
 
@@ -349,6 +352,7 @@ class RAGPipeline:
 				"answer": fallback_answer,
 				"citations": [],
 				"latency_ms": latency_ms,
+				"source": "web",
 				"_telemetry": telemetry,
 			}
 		generated = self._generate_with_openrouter_web(query, web_ctx, memories=memories, dialog_context=dialog_context)
@@ -373,6 +377,7 @@ class RAGPipeline:
 			"answer": answer,
 			"citations": [],
 			"latency_ms": latency_ms,
+			"source": "web",
 			"_telemetry": telemetry,
 		}
 

@@ -14,9 +14,12 @@ export type Citation = {
   end: number
 }
 
+export type AnswerSource = 'internal' | 'web'
+
 export type AskResponse = {
   answer: string
   citations: Citation[]
   latency_ms: number
+  source: AnswerSource
 }
 
