@@ -200,6 +200,10 @@ export default function App() {
   }
 
   function onCreateChat() {
+    if (currentChat && currentChat.messages.length === 0) {
+      setCurrentChatId(currentChat.id)
+      return
+    }
     const next = createEmptyChat()
     setChats((prev) => [...prev, next])
     setCurrentChatId(next.id)
