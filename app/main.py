@@ -46,8 +46,8 @@ class AskResponse(BaseModel):
 @app.post("/ask", response_model=AskResponse)
 async def ask(req: AskRequest) -> AskResponse:
 	# Docs-first: try internal docs. Only if insufficient and web_search is enabled -> web.
-	# Clamp top_k to at least 1, fallback to settings.default_top_k
-	tk = int(req.top_k) if (req.top_k and req.top_k >= 1) else int(getattr(settings, "default_top_k", 200))
+	# Clamp top_k to at least 1; use settings.default_top_k единообразно
+	tk = int(req.top_k) if (req.top_k and req.top_k >= 1) else settings.default_top_k
 	user_id = req.user_id or settings.memory_default_user_id
 	session_id = req.session_id or user_id
 	res = pipeline.answer_internal(req.query, top_k=tk, user_id=user_id, session_id=session_id)
