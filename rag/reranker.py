@@ -27,7 +27,21 @@ class Reranker:
 
 	def score_pairs(self, query: str, passages: Iterable[str], batch_size: int | None = None, max_length: int | None = 1024) -> List[float]:
 		pairs = [[query, p] for p in passages]
-		scores = self.model.compute_score(pairs, batch_size=(batch_size or settings.batch_size_rerank), max_length=max_length)
+		bs = batch_size or settings.batch_size_rerank
+		if bs is None or bs < 1:
+			bs = 1
+		# Ограничиваем длину последовательности: 768–1024
+		cfg_len = settings.rerank_max_length
+		if cfg_len < 768:
+			cfg_len = 768
+		if cfg_len > 1024:
+			cfg_len = 1024
+		use_len = max_length if max_length is not None else cfg_len
+		if use_len < 768:
+			use_len = 768
+		if use_len > 1024:
+			use_len = 1024
+		scores = self.model.compute_score(pairs, batch_size=bs, max_length=use_len)
 		return [self._normalize(s) for s in scores]
 
 	def rerank(self, query: str, passages_with_meta: List[Tuple[str, dict]], top_n: int) -> List[Tuple[str, dict, float]]:

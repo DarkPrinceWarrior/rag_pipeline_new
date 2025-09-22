@@ -34,6 +34,7 @@ class Settings:
 		"title: {title} | text: {text}",
 	)
 	reranker_model_id: str = os.getenv("RERANKER_MODEL_ID", "BAAI/bge-reranker-v2-m3")
+	rerank_max_length: int = int(os.getenv("RERANK_MAX_LENGTH", "896"))
 	llm_model_id: str = os.getenv("LLM_MODEL_ID", "qwen/qwen3-30b-a3b-instruct-2507")
 	openrouter_endpoint: str = os.getenv("OPENROUTER_ENDPOINT", "https://openrouter.ai/api/v1/chat/completions")
 
