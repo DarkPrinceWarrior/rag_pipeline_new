@@ -212,7 +212,7 @@ class RAGPipeline:
 		try:
 			if session_id:
 				self.conv.append(session_id, user_ref, "user", query)
-				if answer:
+				if answer and not self.is_insufficient_answer(answer):
 					self.conv.append(session_id, user_ref, "assistant", answer)
 				self._maybe_update_summary(session_id)
 		except Exception:
@@ -309,7 +309,8 @@ class RAGPipeline:
 			"num_citations": len(citations),
 			"used_memories": len(memories),
 		}
-		self.memory.store_exchange(query, answer, user_ref, metadata={"mode": "internal"})
+		if not self.is_insufficient_answer(answer):
+			self.memory.store_exchange(query, answer, user_ref, metadata={"mode": "internal"})
 		try:
 			if session_id:
 				self.conv.append(session_id, user_ref, "user", query)
@@ -370,7 +371,8 @@ class RAGPipeline:
 			"web_result_urls": [r.url for r in web_results],
 			"used_memories": len(memories),
 		}
-		self.memory.store_exchange(query, answer, user_ref, metadata={"mode": "web"})
+		if not self.is_insufficient_answer(answer):
+			self.memory.store_exchange(query, answer, user_ref, metadata={"mode": "web"})
 		try:
 			if session_id:
 				self.conv.append(session_id, user_ref, "user", query)
