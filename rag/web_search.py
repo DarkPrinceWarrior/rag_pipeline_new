@@ -101,10 +101,6 @@ def web_search(query: str, max_results: int = 5, timeout: float = 10.0) -> List[
     return results
 
 
-def fetch_page_text(url: str, timeout: float = 10.0, max_chars: int = 4000) -> Optional[str]:
-    # Удалено: повторная загрузка страниц через httpx не требуется, содержимое приходит от Tavily
-    return None
-
 
 def build_web_context(query: str, max_results: int = 5, fetch_top_n: int = 3, max_tokens: int = 3200) -> tuple[str, List[WebResult]]:
     results = web_search(query, max_results=max_results)
