@@ -24,17 +24,32 @@ class EmbeddingModel:
 
 	def embed(self, texts: Iterable[str], batch_size: int | None = None) -> List[List[float]]:
 		batch_size = batch_size or settings.batch_size_embed
-		emb = self.model.encode(
-			list(texts),
+		# sentence-transformers >=2.7 поддерживает prompt= для instruct моделей;
+		# если параметр недоступен, префиксуем тексты вручную.
+		items = list(texts)
+		kwargs = dict(
 			batch_size=batch_size,
 			normalize_embeddings=self.normalize,
 			convert_to_numpy=True,
 			show_progress_bar=False,
 		)
+		try:
+			# Попытка использовать нативный prompt=
+			emb = self.model.encode(items, prompt=None, **kwargs)
+		except TypeError:
+			# Фолбэк без prompt=
+			emb = self.model.encode(items, **kwargs)
 		return emb.tolist()
 
 	def embed_query(self, text: str) -> List[float]:
-		return self.embed([text])[0]
+		prefix = settings.embed_query_prompt or ""
+		q = f"{prefix}{text}" if prefix else text
+		# Если модель поддерживает prompt=, используем его вместо префикса
+		try:
+			emb = self.model.encode([text], prompt=prefix or None, batch_size=1, normalize_embeddings=self.normalize, convert_to_numpy=True, show_progress_bar=False)
+		except TypeError:
+			emb = self.model.encode([q], batch_size=1, normalize_embeddings=self.normalize, convert_to_numpy=True, show_progress_bar=False)
+		return emb[0].tolist()
 
 	@property
 	def dim(self) -> int:

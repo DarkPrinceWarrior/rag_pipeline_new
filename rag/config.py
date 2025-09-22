@@ -23,6 +23,16 @@ class Settings:
 	lancedb_table: str = os.getenv("LANCEDB_TABLE", "user_guide")
 
 	embedding_model_id: str = os.getenv("EMBEDDING_MODEL_ID", "google/embeddinggemma-300m")
+	# Инструкции для Embedding Gemma (и подобных instruct моделей)
+	embed_query_prompt: str = os.getenv(
+		"EMBED_QUERY_PROMPT",
+		"task: search_document | query: ",
+	)
+	embed_passage_title_field: str = os.getenv("EMBED_PASSAGE_TITLE_FIELD", "section_path")
+	embed_passage_format: str = os.getenv(
+		"EMBED_PASSAGE_FORMAT",
+		"title: {title} | text: {text}",
+	)
 	reranker_model_id: str = os.getenv("RERANKER_MODEL_ID", "BAAI/bge-reranker-v2-m3")
 	llm_model_id: str = os.getenv("LLM_MODEL_ID", "qwen/qwen3-30b-a3b-instruct-2507")
 	openrouter_endpoint: str = os.getenv("OPENROUTER_ENDPOINT", "https://openrouter.ai/api/v1/chat/completions")

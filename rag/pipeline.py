@@ -90,7 +90,12 @@ class RAGPipeline:
 				"element_type": hit.get("element_type"),
 				"lang": hit.get("lang"),
 			}
-			passages_with_meta.append((hit["text"], meta))
+			# Формируем passage в формате Embedding Gemma: title | text
+			title_field = settings.embed_passage_title_field or "section_path"
+			title_val = (hit.get(title_field) or hit.get("filename") or "").strip()
+			text_val = hit["text"]
+			formatted = settings.embed_passage_format.format(title=title_val, text=text_val)
+			passages_with_meta.append((formatted, meta))
 		reranked = self.reranker.rerank(query, passages_with_meta, top_n=15)
 		best_score = float(reranked[0][2]) if reranked else 0.0
 		# Assemble with headers and token budget
